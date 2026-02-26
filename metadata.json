@@ -1,0 +1,9 @@
+{
+  "name": "Remix: KiteTrade Pro",
+  "description": "A high-performance mobile trading application inspired by modern fintech UI/UX, featuring real-time market tracking, portfolio management, and secure fund transfers.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

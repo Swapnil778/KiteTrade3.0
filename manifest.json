@@ -1,0 +1,18 @@
+
+{
+  "name": "KiteTrade Pro",
+  "short_name": "KiteTrade",
+  "description": "High-performance mobile trading application.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#387ed1",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2502/2502544.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
