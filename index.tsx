@@ -124,7 +124,7 @@ const AppContent: React.FC = () => {
   if (currentScreen === AppScreen.ADMIN_LOGIN) {
     return (
       <AdminLogin 
-        onLogin={() => handleLogin(true)} 
+        onLogin={(id) => handleLogin(true, id)} 
         onForgot={() => setCurrentScreen(AppScreen.FORGOT_PASSWORD)} 
         onSignUp={() => setCurrentScreen(AppScreen.ADMIN_SIGNUP)} 
         onBackToUserLogin={() => setCurrentScreen(AppScreen.LOGIN)}
