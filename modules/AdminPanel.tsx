@@ -8,7 +8,7 @@ import {
   Bell, Download, FileText, Map, Clock, Unlock, Eye, Filter, Trash2, CheckCircle,
   TrendingDown, Info, ShieldAlert, Copy, Check, Trash, X, Landmark, Wallet, History,
   Save, AlertTriangle, FileSpreadsheet, Ban, CheckCircle2, Edit3, MoreVertical,
-  UserCircle, Percent, Shield, Loader2
+  UserCircle, Percent, Shield, Loader2, Menu
 } from 'lucide-react';
 import { AdminRole, AdminStats, AuditLog, PaymentDetail, Transaction, User } from '../types';
 
@@ -80,12 +80,13 @@ const SidebarItem = ({ icon, label, active, onClick, collapsed }: { icon: any, l
 
 const DashboardOverview = ({ stats }: { stats: AdminStats }) => (
   <div className="space-y-8 animate-in fade-in duration-700">
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-      <StatCard label="Live Users" value={stats.activeNow.toString()} change="0%" icon={<Activity className="text-gray-400"/>} sparkData={[0, 0, 0, 0, 0]} />
-      <StatCard label="Total Capital" value={`$0`} change="0%" icon={<ArrowUpRight className="text-gray-400"/>} sparkData={[0, 0, 0, 0, 0]} />
-      <StatCard label="Daily Vol" value="$0" change="0%" icon={<TrendingUp className="text-gray-400"/>} sparkData={[0, 0, 0, 0, 0]} />
-      <StatCard label="Pending" value={stats.pendingWithdrawalsCount.toString()} change="Payouts" icon={<Clock className="text-gray-400"/>} sparkData={[0, 0, 0, 0, 0]} />
-      <StatCard label="Rev (24h)" value={`$0`} change="0%" icon={<Zap className="text-gray-400"/>} sparkData={[0, 0, 0, 0, 0]} />
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      <StatCard label="Live Users" value={stats.activeNow.toString()} change="0%" icon={<Activity className="text-blue-500"/>} sparkData={[0, 0, 0, 0, 0]} />
+      <StatCard label="KYC Pending" value={stats.pendingKycCount.toString()} change="Action" icon={<ShieldAlert className="text-amber-500"/>} sparkData={[0, 0, 0, 0, 0]} />
+      <StatCard label="Total Capital" value={`$${stats.totalDeposits.toLocaleString()}`} change="0%" icon={<ArrowUpRight className="text-emerald-500"/>} sparkData={[0, 0, 0, 0, 0]} />
+      <StatCard label="Daily Vol" value={`$${stats.tradingVolume.toLocaleString()}`} change="0%" icon={<TrendingUp className="text-blue-400"/>} sparkData={[0, 0, 0, 0, 0]} />
+      <StatCard label="Pending" value={stats.pendingWithdrawalsCount.toString()} change="Payouts" icon={<Clock className="text-amber-400"/>} sparkData={[0, 0, 0, 0, 0]} />
+      <StatCard label="Rev (24h)" value={`$${stats.revenue.toLocaleString()}`} change="0%" icon={<Zap className="text-emerald-400"/>} sparkData={[0, 0, 0, 0, 0]} />
     </div>
   </div>
 );
@@ -95,6 +96,7 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showBlockModal, setShowBlockModal] = useState<{ userId: string, fullName: string } | null>(null);
+  const [showKycModal, setShowKycModal] = useState<User | null>(null);
   const [blockReason, setBlockReason] = useState('');
 
   const fetchUsers = async () => {
@@ -154,6 +156,23 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
     }
   };
 
+  const handleKycUpdate = async (userId: string, status: User['kycStatus']) => {
+    try {
+      const res = await fetch('/api/admin/users/kyc-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, status })
+      });
+      if (res.ok) {
+        addLog(`KYC ${status}: ${userId}`, userId);
+        fetchUsers();
+        setShowKycModal(null);
+      }
+    } catch (err) {
+      console.error("Failed to update KYC:", err);
+    }
+  };
+
   const filteredUsers = users.filter(u => 
     u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
     u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -163,7 +182,7 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
   return (
     <div className="bg-[#12161f] rounded-2xl border border-white/5 shadow-2xl overflow-hidden animate-in slide-in-from-bottom-4 relative">
       <div className="p-6 border-b border-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#1e2532]/30">
-        <h3 className="font-bold text-white flex items-center gap-2"><Users className="text-blue-500" size={18} /> User Management</h3>
+        <h3 className="font-black text-white uppercase tracking-tighter italic flex items-center gap-2"><Users className="text-blue-500" size={18} /> User & KYC Management</h3>
         <div className="flex items-center gap-3 w-full md:w-auto">
           <button onClick={fetchUsers} className="p-2 hover:bg-white/5 text-gray-400 rounded-lg transition-colors">
             <RefreshCcw size={16} className={isLoading ? 'animate-spin' : ''} />
@@ -171,7 +190,7 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
           <div className="relative flex-1 md:flex-none">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
             <input 
-              className="bg-[#1e2532] border border-white/5 rounded-xl py-2 pl-10 pr-4 text-xs w-full md:w-64 outline-none focus:border-[#387ed1]" 
+              className="bg-[#1e2532] border border-white/5 rounded-xl py-2 pl-10 pr-4 text-xs w-full md:w-64 outline-none focus:border-[#387ed1] font-bold" 
               placeholder="Search by name, email, phone..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -184,8 +203,8 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
           <thead className="bg-[#1e2532]/50 text-[10px] uppercase font-black tracking-widest text-gray-500 border-b border-white/5">
             <tr>
               <th className="px-6 py-4">User Details</th>
-              <th className="px-6 py-4">Registration</th>
-              <th className="px-6 py-4">Status</th>
+              <th className="px-6 py-4">KYC Status</th>
+              <th className="px-6 py-4">Account Status</th>
               <th className="px-6 py-4 text-right">Actions</th>
             </tr>
           </thead>
@@ -194,19 +213,31 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
               <tr key={u.id} className="hover:bg-white/5 transition-colors group">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold ${u.status === 'active' ? 'bg-blue-500/10 text-blue-500' : 'bg-red-500/10 text-red-500'}`}>
-                      {u.fullName.charAt(0)}
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xs font-black uppercase ${u.status === 'active' ? 'bg-blue-500/10 text-blue-500' : 'bg-red-500/10 text-red-500'}`}>
+                      {u.fullName.split(' ').map(n => n[0]).join('')}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-white">{u.fullName}</p>
-                      <p className="text-[10px] text-gray-500">{u.email} {u.phone && `• ${u.phone}`}</p>
+                      <p className="text-sm font-black text-white uppercase tracking-tight">{u.fullName}</p>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{u.email} {u.phone && `• ${u.phone}`}</p>
                     </div>
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                    {new Date(u.registrationDate).toLocaleDateString()}
-                  </p>
+                  <button 
+                    onClick={() => setShowKycModal(u)}
+                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border transition-all ${
+                      u.kycStatus === 'VERIFIED' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                      u.kycStatus === 'PENDING' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                      u.kycStatus === 'REJECTED' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                      'bg-gray-500/10 text-gray-500 border-gray-500/20'
+                    }`}
+                  >
+                    {u.kycStatus === 'VERIFIED' && <CheckCircle2 size={10} />}
+                    {u.kycStatus === 'PENDING' && <Clock size={10} />}
+                    {u.kycStatus === 'REJECTED' && <AlertTriangle size={10} />}
+                    {u.kycStatus === 'NOT_SUBMITTED' && <Info size={10} />}
+                    {u.kycStatus.replace('_', ' ')}
+                  </button>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex flex-col gap-1">
@@ -223,7 +254,7 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => onViewPayments(u.id)} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-all" title="View Payments">
+                    <button onClick={() => onViewPayments(u.id)} className="p-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg transition-all" title="View Ledger">
                       <CreditCard size={14} />
                     </button>
                     {u.status === 'active' ? (
@@ -263,10 +294,91 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
         </table>
       </div>
 
+      {/* KYC Detail Modal */}
+      {showKycModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-[#12161f] border border-white/10 rounded-[32px] p-8 w-full max-w-2xl shadow-2xl animate-in zoom-in overflow-hidden relative text-white">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-emerald-500" />
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-2xl font-black text-white uppercase tracking-tighter italic">KYC Verification</h3>
+                <p className="text-xs text-gray-500 font-bold uppercase tracking-widest mt-1">{showKycModal.fullName} • {showKycModal.id}</p>
+              </div>
+              <button onClick={() => setShowKycModal(null)} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 text-gray-400 hover:text-white transition-colors"><X size={20}/></button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <div className="space-y-6">
+                <div className="bg-white/5 rounded-2xl p-5 border border-white/5">
+                  <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Current Status</h4>
+                  <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border ${
+                    showKycModal.kycStatus === 'VERIFIED' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                    showKycModal.kycStatus === 'PENDING' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                    showKycModal.kycStatus === 'REJECTED' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
+                    'bg-gray-500/10 text-gray-500 border-gray-500/20'
+                  }`}>
+                    {showKycModal.kycStatus.replace('_', ' ')}
+                  </div>
+                </div>
+
+                <div className="bg-white/5 rounded-2xl p-5 border border-white/5">
+                  <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4">Submitted Documents</h4>
+                  {showKycModal.kycDocuments && showKycModal.kycDocuments.length > 0 ? (
+                    <div className="space-y-4">
+                      {showKycModal.kycDocuments.map((doc, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-3 bg-black/20 rounded-xl border border-white/5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                              <FileText size={16} />
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black text-white uppercase">{doc.type}</p>
+                              <p className="text-[10px] text-gray-500 font-bold">{doc.number}</p>
+                            </div>
+                          </div>
+                          <button className="text-[10px] font-black text-blue-400 uppercase tracking-widest hover:underline">View File</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest italic">No documents submitted yet</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-black/40 rounded-2xl border border-white/5 flex items-center justify-center aspect-video md:aspect-auto relative group overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+                   <p className="text-[10px] font-black text-white uppercase tracking-widest">Document Preview</p>
+                </div>
+                <div className="text-center p-8">
+                  <Shield size={48} className="text-gray-700 mx-auto mb-4" />
+                  <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Select a document to preview</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <button 
+                onClick={() => handleKycUpdate(showKycModal.id, 'REJECTED')}
+                className="flex-1 py-4 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white font-black rounded-2xl transition-all uppercase text-xs tracking-widest border border-red-500/20"
+              >
+                Reject KYC
+              </button>
+              <button 
+                onClick={() => handleKycUpdate(showKycModal.id, 'VERIFIED')}
+                className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl transition-all shadow-xl shadow-emerald-500/20 uppercase text-xs tracking-widest"
+              >
+                Approve KYC
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Block Confirmation Modal */}
       {showBlockModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#12161f] border border-white/10 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-in zoom-in">
+          <div className="bg-[#12161f] border border-white/10 rounded-2xl p-8 w-full max-w-md shadow-2xl animate-in zoom-in text-white">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xl font-bold flex items-center gap-2 text-red-500"><Ban size={20} /> Block User</h3>
               <button onClick={() => setShowBlockModal(null)} className="text-gray-500 hover:text-white"><X size={24}/></button>
@@ -281,7 +393,7 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
               <div>
                 <label className="text-[10px] font-black text-gray-500 uppercase mb-2 block tracking-widest">Reason for Blocking</label>
                 <textarea 
-                  className="w-full bg-black/20 border border-white/5 rounded-xl py-3 px-4 outline-none focus:border-red-500 text-sm font-medium h-24 resize-none" 
+                  className="w-full bg-black/20 border border-white/5 rounded-xl py-3 px-4 outline-none focus:border-red-500 text-sm font-medium h-24 resize-none text-white" 
                   placeholder="Enter reason (e.g. Suspicious activity, Terms violation...)"
                   value={blockReason}
                   onChange={(e) => setBlockReason(e.target.value)}
@@ -432,18 +544,42 @@ const UserPaymentManagement = ({ userId, onBack, role, addLog }: { userId: strin
 const FinancialManagement = ({ stats }: { stats: AdminStats }) => (
   <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-       <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center">
+       <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-50" />
           <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Net Balance</p>
-          <p className="text-4xl font-black text-white">$0.00</p>
-          <div className="mt-4 flex items-center justify-center gap-2 text-gray-600 text-[10px] font-black">NO RECENT GROWTH</div>
+          <p className="text-4xl font-black text-white">${(stats.totalDeposits - stats.totalWithdrawals).toLocaleString()}</p>
+          <div className="mt-4 flex items-center justify-center gap-2 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
+            <TrendingUp size={12} /> System Healthy
+          </div>
        </div>
-       <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Inflow</p>
-          <p className="text-4xl font-black text-blue-400">$0.00</p>
+       <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500 opacity-50" />
+          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Total Inflow</p>
+          <p className="text-4xl font-black text-emerald-400">${stats.totalDeposits.toLocaleString()}</p>
+          <p className="text-[10px] text-gray-600 font-bold mt-2 uppercase tracking-widest">Cumulative Deposits</p>
        </div>
-       <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center">
-          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Outflow</p>
-          <p className="text-4xl font-black text-red-400">$0.00</p>
+       <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-red-500 opacity-50" />
+          <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Total Outflow</p>
+          <p className="text-4xl font-black text-red-400">${stats.totalWithdrawals.toLocaleString()}</p>
+          <p className="text-[10px] text-gray-600 font-bold mt-2 uppercase tracking-widest">Processed Payouts</p>
+       </div>
+    </div>
+    
+    <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl">
+       <div className="flex justify-between items-center mb-8">
+          <h3 className="text-xl font-black italic uppercase tracking-tighter flex items-center gap-3"><Zap size={24} className="text-emerald-500" /> Revenue Analytics</h3>
+          <div className="px-4 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[10px] font-black text-emerald-500 uppercase tracking-widest">Live Feed</div>
+       </div>
+       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="p-6 bg-white/5 rounded-2xl border border-white/5">
+             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Platform Revenue (2% Fee)</p>
+             <p className="text-3xl font-black text-white">${stats.revenue.toLocaleString()}</p>
+          </div>
+          <div className="p-6 bg-white/5 rounded-2xl border border-white/5">
+             <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Trading Volume</p>
+             <p className="text-3xl font-black text-blue-400">${stats.tradingVolume.toLocaleString()}</p>
+          </div>
        </div>
     </div>
   </div>
@@ -565,17 +701,24 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, onExitAdmin }) => {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   
-  const [marketConfig, setMarketConfig] = useState({
-    price: 0,
-    volatility: 0,
-    winRatio: 0,
-    mode: 'auto' as 'auto' | 'manual',
-    direction: 'neutral' as 'up' | 'down' | 'neutral',
-    spread: 0,
-    leverage: '1:0',
-    brokerage: 0,
-    marginMultiplier: 0
+  const [marketConfig, setMarketConfig] = useState(() => {
+    const saved = localStorage.getItem('kite_market_config');
+    return saved ? JSON.parse(saved) : {
+      price: 0,
+      volatility: 0,
+      winRatio: 0,
+      mode: 'auto' as 'auto' | 'manual',
+      direction: 'neutral' as 'up' | 'down' | 'neutral',
+      spread: 0,
+      leverage: '1:0',
+      brokerage: 0,
+      marginMultiplier: 0
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem('kite_market_config', JSON.stringify(marketConfig));
+  }, [marketConfig]);
 
   const [stats, setStats] = useState<AdminStats>({
     totalUsers: 0,
@@ -586,10 +729,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, onExitAdmin }) => {
     tradingVolume: 0,
     totalOpenTrades: 0,
     pendingWithdrawalsCount: 0,
+    pendingKycCount: 0,
     apiUsageCount: 0,
     failedLogins: 0,
     downloads: { total: 0, ios: 0, android: 0 }
   });
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch('/api/admin/stats');
+      const data = await res.json();
+      setStats(data);
+    } catch (err) {
+      console.error("Failed to fetch stats:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   const addLog = (action: string, target?: string) => {
     const newLog: AuditLog = {
@@ -610,7 +770,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, onExitAdmin }) => {
 
   return (
     <div className="flex h-screen bg-[#0b0e14] text-gray-100 overflow-hidden font-sans select-none border-t-4 border-[#387ed1]">
-      <aside className={`${isSidebarOpen ? 'w-64' : 'w-20'} bg-[#12161f] border-r border-white/5 transition-all duration-300 flex flex-col shrink-0 z-50`}>
+      {/* Mobile Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[55] md:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      <aside className={`
+        fixed inset-y-0 left-0 z-[60] md:relative md:z-auto
+        transition-all duration-300 ease-in-out
+        ${isSidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-full md:w-20 md:translate-x-0'}
+        bg-[#12161f] border-r border-white/5 flex flex-col shrink-0
+      `}>
         <div className="p-6 flex items-center gap-3 border-b border-white/5 h-20">
           <LogoIcon size="sm" />
           {isSidebarOpen && (
@@ -659,25 +832,30 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, onExitAdmin }) => {
       </aside>
 
       <main className="flex-1 flex flex-col min-w-0 bg-[#0b0e14] relative">
-        <header className="h-20 border-b border-white/5 bg-[#12161f]/50 backdrop-blur-xl px-8 flex items-center justify-between sticky top-0 z-40">
-          <div className="flex items-center gap-6">
+        <header className="h-20 border-b border-white/5 bg-[#12161f]/50 backdrop-blur-xl px-4 md:px-8 flex items-center justify-between sticky top-0 z-40">
+          <div className="flex items-center gap-3 md:gap-6">
             <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-white/5 rounded-lg text-gray-400 transition-colors">
-               <ChevronRight className={`transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`} size={20} />
+               <Menu className="md:hidden" size={20} />
+               <ChevronRight className={`hidden md:block transition-transform duration-300 ${isSidebarOpen ? 'rotate-180' : ''}`} size={20} />
             </button>
-            <h2 className="text-lg font-bold text-white capitalize flex items-center gap-2">
+            <h2 className="text-base md:text-lg font-bold text-white capitalize flex items-center gap-2">
               {activeView.replace('-', ' ')}
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full uppercase tracking-widest font-black ml-2">Master Mode</span>
+              <span className="hidden sm:inline-flex text-[10px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full uppercase tracking-widest font-black ml-2">Master Mode</span>
             </h2>
           </div>
-          <div className="flex items-center gap-4">
-             <div className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 rounded-xl border border-blue-500/20">
+          <div className="flex items-center gap-2 md:gap-4">
+             <div className="flex items-center gap-2 px-3 md:px-4 py-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[9px] md:text-[10px] font-black uppercase text-emerald-500">Online</span>
+             </div>
+             <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-500/10 rounded-xl border border-blue-500/20">
                 <Shield size={16} className="text-blue-400" />
-                <span className="text-[10px] font-black uppercase text-blue-400">Secure Node</span>
+                <span className="text-[10px] font-black uppercase text-blue-400">Secure</span>
              </div>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 space-y-8 hide-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 hide-scrollbar">
           {activeView === 'dashboard' && <DashboardOverview stats={stats} />}
           {activeView === 'users' && <UserManagement addLog={addLog} onViewPayments={handleViewUserPayments} />}
           {activeView === 'user-payments' && selectedUserId && (

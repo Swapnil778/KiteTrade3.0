@@ -49,6 +49,14 @@ export interface User {
   blockedBy?: string;
   blockReason?: string;
   role: 'user' | 'admin';
+  kycStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'NOT_SUBMITTED';
+  kycDocuments?: {
+    type: 'AADHAAR' | 'PAN' | 'PASSPORT' | 'VOTER_ID';
+    number: string;
+    frontUrl?: string;
+    backUrl?: string;
+    submittedAt: string;
+  }[];
 }
 
 export interface Order {
@@ -72,6 +80,7 @@ export interface AdminStats {
   tradingVolume: number;
   totalOpenTrades: number;
   pendingWithdrawalsCount: number;
+  pendingKycCount: number;
   apiUsageCount: number;
   failedLogins: number;
   downloads: {

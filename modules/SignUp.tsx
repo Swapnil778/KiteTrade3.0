@@ -9,7 +9,9 @@ interface SignUpProps {
 }
 
 const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp }) => {
-  const [step, setStep] = useState<'phone' | 'otp'>('phone');
+  const [step, setStep] = useState<'details' | 'otp'>('details');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [generatedOtp, setGeneratedOtp] = useState('');
@@ -42,8 +44,8 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
-  const handlePhoneSubmit = () => {
-    if (phone.length < 5) return;
+  const handleDetailsSubmit = () => {
+    if (!fullName || !email || !phone) return;
     setIsSubmitting(true);
     
     setTimeout(() => {
@@ -96,7 +98,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
           const res = await fetch('/api/auth/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, fullName: 'New User', email: `${phone}@kite.pro` })
+            body: JSON.stringify({ phone, fullName, email })
           });
           
           if (!res.ok) {
@@ -133,7 +135,7 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
     verifyAndRegister();
   };
 
-  const isPhoneValid = phone.length >= 5;
+  const isFormValid = fullName.length >= 2 && email.includes('@') && phone.length >= 5;
 
   return (
     <div className="p-6 pt-12 flex flex-col h-full bg-white text-gray-800 dark:bg-gray-900 dark:text-gray-100 transition-colors screen-fade-in relative overflow-hidden">
@@ -178,35 +180,60 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
           <ChevronLeft size={24} />
         </button>
         <h1 className="text-2xl font-bold">
-          {step === 'phone' ? 'Open an account' : 'Verify Identity'}
+          {step === 'details' ? 'Open an account' : 'Verify Identity'}
         </h1>
       </div>
 
-      <div className="space-y-8 flex-1">
-        {step === 'phone' && (
+      <div className="space-y-6 flex-1 overflow-y-auto hide-scrollbar">
+        {step === 'details' && (
           <>
             <p className="text-gray-500 text-sm leading-relaxed">
               Join 1.5+ crore investors and traders.
             </p>
 
-            <div className="relative group">
-              <input 
-                type="text" 
-                autoFocus
-                className="w-full border-b border-gray-200 dark:border-gray-800 py-3 focus:border-[#387ed1] bg-transparent outline-none transition-colors text-lg placeholder:text-gray-600 font-medium"
-                placeholder="Email or Mobile number"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
+            <div className="space-y-6">
+              <div className="relative group">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Full Name</label>
+                <input 
+                  type="text" 
+                  autoFocus
+                  className="w-full border-b border-gray-200 dark:border-gray-800 py-2 focus:border-[#387ed1] bg-transparent outline-none transition-colors text-lg placeholder:text-gray-300 font-medium"
+                  placeholder="Enter your full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+
+              <div className="relative group">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Email Address</label>
+                <input 
+                  type="email" 
+                  className="w-full border-b border-gray-200 dark:border-gray-800 py-2 focus:border-[#387ed1] bg-transparent outline-none transition-colors text-lg placeholder:text-gray-300 font-medium"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+
+              <div className="relative group">
+                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">Mobile Number</label>
+                <input 
+                  type="tel" 
+                  className="w-full border-b border-gray-200 dark:border-gray-800 py-2 focus:border-[#387ed1] bg-transparent outline-none transition-colors text-lg placeholder:text-gray-300 font-medium"
+                  placeholder="Enter mobile number"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
             </div>
 
             <button 
-              onClick={handlePhoneSubmit}
-              disabled={!isPhoneValid || isSubmitting || !phone}
+              onClick={handleDetailsSubmit}
+              disabled={!isFormValid || isSubmitting}
               className={`
-                w-full h-[52px] rounded-[10px] font-bold text-lg
+                w-full h-[52px] rounded-[10px] font-bold text-lg mt-4
                 flex items-center justify-center gap-2 transition-all
-                ${!isPhoneValid || isSubmitting || !phone
+                ${!isFormValid || isSubmitting
                   ? 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed' 
                   : 'bg-[#387ed1] text-white shadow-lg shadow-blue-500/20 hover:bg-[#2F6FC1]'
                 }

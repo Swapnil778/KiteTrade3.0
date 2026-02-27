@@ -109,48 +109,49 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
   const hasRegistered = recentAccounts.length > 0 || hasOnboarded;
 
   return (
-    <div className={`p-6 pt-12 flex flex-col h-full transition-colors relative screen-fade-in overflow-y-auto hide-scrollbar ${isAdmin ? 'bg-[#0b0e14] text-gray-100' : 'bg-white text-gray-800 dark:bg-gray-900 dark:text-gray-100'}`}>
-      <div className="flex justify-between items-center mb-12">
-        <ChevronLeft 
-          className="cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 p-1 rounded-full transition-colors" 
-          size={24} 
-          onClick={isAdmin ? onToggleAdmin : onForgot} 
-        />
+    <div className={`p-8 pt-16 flex flex-col h-full transition-colors relative screen-fade-in overflow-y-auto hide-scrollbar ${isAdmin ? 'bg-[#0b0e14] text-gray-100' : 'bg-white text-gray-800 dark:bg-black dark:text-gray-100'}`}>
+      <div className="flex justify-between items-center mb-16">
+        <button 
+          onClick={isAdmin ? onToggleAdmin : onForgot}
+          className="w-11 h-11 flex items-center justify-center rounded-2xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 active:scale-90 transition-all"
+        >
+          <ChevronLeft size={22} className="text-gray-600 dark:text-gray-400" />
+        </button>
         
         {/* Logo */}
-        <div className={`relative w-14 h-14 rounded-full p-0.5 shadow-xl flex items-center justify-center overflow-hidden bg-gradient-to-tr ${isAdmin ? 'from-blue-600 to-blue-400' : 'from-[#387ed1] to-[#64b5f6]'}`}>
-          <div className={`w-full h-full rounded-full flex items-center justify-center border-2 border-white/50 shadow-inner bg-gradient-to-b ${isAdmin ? 'from-gray-800 to-black' : 'from-gray-100 to-gray-300 dark:from-gray-700 dark:to-gray-900'}`}>
-            <svg viewBox="0 0 100 100" className="w-8 h-8 drop-shadow-md">
+        <div className={`relative w-16 h-16 rounded-[22px] p-0.5 shadow-2xl flex items-center justify-center overflow-hidden bg-gradient-to-tr ${isAdmin ? 'from-blue-600 to-blue-400' : 'from-brand-600 to-brand-400'}`}>
+          <div className={`w-full h-full rounded-[20px] flex items-center justify-center border-2 border-white/20 shadow-inner bg-gradient-to-b ${isAdmin ? 'from-gray-800 to-black' : 'from-gray-100 to-gray-300 dark:from-gray-800 dark:to-black'}`}>
+            <svg viewBox="0 0 100 100" className="w-10 h-10 drop-shadow-lg">
               <path d="M50 10 L85 45 L50 90 L15 45 Z" fill={isAdmin ? '#2563eb' : '#387ed1'} />
-              <path d="M50 10 L65 30 L50 45 L35 30 Z" fill={isAdmin ? '#3b82f6' : '#4caf50'} />
+              <path d="M50 10 L65 30 L50 45 L35 30 Z" fill={isAdmin ? '#3b82f6' : '#10b981'} />
             </svg>
           </div>
         </div>
       </div>
 
-      <div className="mb-8">
-        <div className="flex items-center gap-2 mb-2">
-          {isAdmin && <ShieldCheck className="text-blue-500" size={20} />}
-          <h1 className={`text-3xl font-black tracking-tighter italic uppercase ${isAdmin ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>
-            {isAdmin ? 'Staff' : 'Kitetrade'} <span className={isAdmin ? 'text-blue-500' : 'text-[#387ed1]'}>{isAdmin ? 'Terminal' : 'PRO'}</span>
+      <div className="mb-10">
+        <div className="flex items-center gap-2 mb-3">
+          {isAdmin && <ShieldCheck className="text-blue-500" size={24} />}
+          <h1 className={`text-4xl font-black tracking-tighter italic uppercase ${isAdmin ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
+            {isAdmin ? 'Staff' : 'Kitetrade'} <span className={isAdmin ? 'text-blue-500' : 'text-brand-500'}>{isAdmin ? 'Terminal' : 'PRO'}</span>
           </h1>
         </div>
-        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">
+        <p className="text-base font-bold text-gray-400 dark:text-gray-500 tracking-tight">
           {isAdmin ? 'Accessing Secure Administrative Layer' : 'Enter your Email or Mobile to continue'}
         </p>
       </div>
 
-      <form onSubmit={handleLoginAttempt} className={`space-y-6 ${isShaking ? 'animate-shake' : ''}`}>
+      <form onSubmit={handleLoginAttempt} className={`space-y-8 ${isShaking ? 'animate-shake' : ''}`}>
         <div className="relative group">
-          <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">
+          <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest block mb-2">
             {isAdmin ? 'Administrator ID' : 'Email or Mobile Number'}
           </label>
           <input 
             type="text" 
             autoComplete="username"
             autoFocus
-            className={`w-full border-b py-3 bg-transparent outline-none transition-all text-xl placeholder:text-gray-300 dark:placeholder:text-gray-700 ${
-              error ? 'border-red-500 focus:border-red-600' : `border-gray-200 dark:border-gray-800 focus:border-${isAdmin ? 'blue-500' : '[#387ed1]'}`
+            className={`w-full border-b-2 py-4 bg-transparent outline-none transition-all text-2xl font-bold placeholder:text-gray-200 dark:placeholder:text-gray-800 ${
+              error ? 'border-kiteRed focus:border-kiteRed' : `border-gray-100 dark:border-gray-900 focus:border-${isAdmin ? 'blue-500' : 'brand-500'}`
             }`}
             placeholder={isAdmin ? "Staff ID" : "Email or Mobile Number"}
             value={userId}
@@ -159,22 +160,22 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
         </div>
 
         <div className="flex justify-between items-center py-2">
-          <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setRememberMe(!rememberMe)}>
-            <div className={`w-4 h-4 rounded border transition-all flex items-center justify-center ${
-              rememberMe ? (isAdmin ? 'bg-blue-600 border-blue-600' : 'bg-[#387ed1] border-[#387ed1]') : 'border-gray-300 dark:border-gray-700 group-hover:border-[#387ed1]'
+          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setRememberMe(!rememberMe)}>
+            <div className={`w-5 h-5 rounded-lg border-2 transition-all flex items-center justify-center ${
+              rememberMe ? (isAdmin ? 'bg-blue-600 border-blue-600' : 'bg-brand-500 border-brand-500') : 'border-gray-200 dark:border-gray-800 group-hover:border-brand-500'
             }`}>
-              {rememberMe && <Check size={12} className="text-white" />}
+              {rememberMe && <Check size={14} className="text-white" strokeWidth={3} />}
             </div>
-            <span className="text-[11px] text-gray-500 font-bold uppercase tracking-wide">Remember Me</span>
+            <span className="text-xs text-gray-500 font-black uppercase tracking-widest">Remember Me</span>
           </div>
-          <button type="button" onClick={onForgot} className={`${isAdmin ? 'text-blue-500' : 'text-[#387ed1]'} text-[11px] font-bold uppercase tracking-wide hover:underline`}>
+          <button type="button" onClick={onForgot} className={`${isAdmin ? 'text-blue-500' : 'text-brand-500'} text-xs font-black uppercase tracking-widest hover:underline`}>
             Forgot Details?
           </button>
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 text-[#df514c] text-sm font-semibold animate-in fade-in slide-in-from-top-1 duration-200">
-            <AlertCircle size={16} />
+          <div className="flex items-center gap-2 text-kiteRed text-sm font-black uppercase tracking-tight animate-in fade-in slide-in-from-top-1 duration-200 bg-kiteRed/5 p-4 rounded-2xl border border-kiteRed/10">
+            <AlertCircle size={18} />
             {error}
           </div>
         )}
@@ -182,44 +183,44 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
         <button 
           type="submit"
           disabled={!userId}
-          className={`w-full py-4 rounded-xl font-bold text-lg mt-2 transition-all shadow-sm flex items-center justify-center gap-2 ${
+          className={`w-full py-5 rounded-2xl font-black text-lg mt-4 transition-all shadow-xl flex items-center justify-center gap-3 active:scale-95 ${
             (!userId) 
-              ? (isAdmin ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-600 cursor-not-allowed') 
-              : (isAdmin ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-lg shadow-blue-500/20' : 'bg-[#387ed1] text-white hover:bg-[#2F6FC1] shadow-lg shadow-blue-500/20')
+              ? (isAdmin ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed') 
+              : (isAdmin ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/25' : 'bg-brand-500 text-white hover:bg-brand-600 shadow-brand-500/25')
           }`}
         >
-          {isAdmin ? 'ACCESS TERMINAL' : 'CONTINUE'} <ArrowRight size={18} />
+          {isAdmin ? 'ACCESS TERMINAL' : 'CONTINUE'} <ArrowRight size={20} strokeWidth={3} />
         </button>
       </form>
 
       {/* Quick Access Section */}
       {recentAccounts.length > 0 && (
-        <div className="mt-10 animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="flex justify-between items-center mb-4">
-             <h3 className="text-[10px] font-black uppercase tracking-widest text-gray-500">Recent {isAdmin ? 'Staff' : 'Accounts'}</h3>
-             <button onClick={() => { setUserId(''); }} className={`text-[10px] ${isAdmin ? 'text-blue-500' : 'text-[#387ed1]'} font-black uppercase tracking-widest`}>Switch Account</button>
+        <div className="mt-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="flex justify-between items-center mb-5">
+             <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Recent {isAdmin ? 'Staff' : 'Accounts'}</h3>
+             <button onClick={() => { setUserId(''); }} className={`text-[11px] ${isAdmin ? 'text-blue-500' : 'text-brand-500'} font-black uppercase tracking-widest`}>Switch Account</button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-4">
              {recentAccounts.map((acc, idx) => (
                <div 
                  key={acc + idx}
                  onClick={() => { setUserId(acc); handleLoginAttempt(undefined, acc); }}
-                 className={`flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer group ${isAdmin ? 'hover:border-blue-500 bg-white/5 border-gray-800 hover:bg-white/10' : 'hover:border-[#387ed1] bg-gray-50 dark:bg-gray-800/40 border-gray-100 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                 className={`flex items-center justify-between p-5 rounded-2xl border transition-all cursor-pointer group shadow-soft ${isAdmin ? 'hover:border-blue-500 bg-white/5 border-gray-800 hover:bg-white/10' : 'hover:border-brand-500 bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                >
                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isAdmin ? 'bg-blue-500/10 text-blue-500' : 'bg-[#387ed1]/10 text-[#387ed1]'}`}>
-                      {isAdmin ? <ShieldCheck size={20} /> : <User size={20} />}
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${isAdmin ? 'bg-blue-500/10 text-blue-500' : 'bg-brand-500/10 text-brand-500'}`}>
+                      {isAdmin ? <ShieldCheck size={24} /> : <User size={24} />}
                     </div>
                     <div>
-                      <p className={`text-sm font-bold truncate max-w-[150px] ${isAdmin ? 'text-white' : 'text-gray-800 dark:text-gray-100'}`}>{acc}</p>
-                      <p className="text-[10px] text-gray-500 uppercase font-medium">{isAdmin ? 'Administrator' : 'Standard User'}</p>
+                      <p className={`text-base font-black truncate max-w-[150px] tracking-tight ${isAdmin ? 'text-white' : 'text-gray-900 dark:text-gray-100'}`}>{acc}</p>
+                      <p className="text-[10px] text-gray-400 uppercase font-black tracking-widest mt-0.5">{isAdmin ? 'Administrator' : 'Standard User'}</p>
                     </div>
                  </div>
-                 <div className="flex items-center gap-2">
-                   <div className="w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all" onClick={(e) => removeRecent(acc, e)}>
-                     <X size={16} />
-                   </div>
-                   <ArrowRight size={16} className={isAdmin ? 'text-blue-500' : 'text-[#387ed1]'} />
+                 <div className="flex items-center gap-3">
+                   <button className="w-9 h-9 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 text-gray-400 hover:text-kiteRed hover:bg-kiteRed/5 transition-all" onClick={(e) => removeRecent(acc, e)}>
+                     <X size={18} />
+                   </button>
+                   <ArrowRight size={18} className={isAdmin ? 'text-blue-500' : 'text-brand-500'} strokeWidth={3} />
                  </div>
                </div>
              ))}
@@ -227,17 +228,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
         </div>
       )}
 
-      <div className="mt-auto pt-10 pb-6 flex flex-col items-center gap-6">
+      <div className="mt-auto pt-12 pb-8 flex flex-col items-center gap-8">
         {!isAdmin && (
-          <div className="w-full pt-6 border-t flex flex-col items-center border-gray-50 dark:border-gray-800 space-y-4">
+          <div className="w-full pt-8 border-t flex flex-col items-center border-gray-50 dark:border-gray-900/50 space-y-6">
              <div className="w-full">
-               <p className="text-gray-500 text-center text-[11px] mb-4 uppercase font-bold tracking-widest">New to Kitetrade?</p>
+               <p className="text-gray-400 text-center text-[11px] mb-5 uppercase font-black tracking-widest">New to Kitetrade?</p>
                <button 
                   type="button"
                   onClick={onSignUp}
-                  className="w-full h-[52px] bg-white dark:bg-gray-900 border border-[#387ed1] text-[#387ed1] rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-all flex items-center justify-center"
+                  className="w-full h-[56px] bg-white dark:bg-black border-2 border-brand-500 text-brand-500 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-brand-500 hover:text-white active:scale-95 transition-all flex items-center justify-center"
                 >
-                  Sign up
+                  Create Account
                 </button>
              </div>
              
@@ -246,9 +247,9 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
                  <button 
                     type="button"
                     onClick={onToggleAdmin}
-                    className="w-full flex items-center justify-center gap-2 py-3 text-gray-300 dark:text-gray-700 hover:text-blue-500 transition-colors text-[10px] font-black uppercase tracking-[0.2em]"
+                    className="w-full flex items-center justify-center gap-2 py-4 text-gray-300 dark:text-gray-700 hover:text-blue-500 transition-colors text-[10px] font-black uppercase tracking-[0.25em]"
                   >
-                    <Lock size={12} /> Admin Login
+                    <Lock size={12} strokeWidth={3} /> Admin Login
                   </button>
                </div>
              )}
@@ -256,12 +257,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
         )}
         
         {isAdmin && !hasRegistered && (
-          <div className="w-full pt-6 border-t flex flex-col items-center border-gray-800">
-             <p className="text-gray-500 text-[11px] mb-4 uppercase font-bold tracking-widest">Employee onboarding</p>
+          <div className="w-full pt-8 border-t flex flex-col items-center border-gray-800">
+             <p className="text-gray-500 text-[11px] mb-5 uppercase font-black tracking-widest">Employee onboarding</p>
              <button 
                 type="button"
                 onClick={onSignUp}
-                className="w-full h-[52px] bg-transparent border border-blue-500 text-blue-500 rounded-xl font-bold text-sm uppercase tracking-widest hover:bg-blue-500/10 transition-all flex items-center justify-center"
+                className="w-full h-[56px] bg-transparent border-2 border-blue-500 text-blue-500 rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-500 hover:text-white active:scale-95 transition-all flex items-center justify-center"
               >
                 Request Access
               </button>

@@ -17,6 +17,11 @@ const MOCK_WATCHLIST = [
   { symbol: 'BTC/USD', name: 'Bitcoin / US Dollar', exchange: 'CRYPTO', ltp: 62450.00, change: -840.40, percentChange: -1.33, isUp: false },
 ];
 
+const MOCK_TRADE_HISTORY = [
+  { id: 'th1', symbol: 'EUR/USD', type: 'BUY', status: 'COMPLETED', price: 1.0750, quantity: 10000, time: '2026-02-20 10:00 AM' },
+  { id: 'th2', symbol: 'GBP/JPY', type: 'BUY', status: 'COMPLETED', price: 188.00, quantity: 5000, time: '2026-02-21 02:30 PM' },
+];
+
 let currentStocks = [...MOCK_WATCHLIST];
 
 // In-memory user state (for demo purposes)
@@ -32,7 +37,11 @@ let users: User[] = [
     phone: '9876543210',
     registrationDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
     status: 'active',
-    role: 'user'
+    role: 'user',
+    kycStatus: 'VERIFIED',
+    kycDocuments: [
+      { type: 'AADHAAR', number: '1234-5678-9012', submittedAt: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString() }
+    ]
   },
   {
     id: '2',
@@ -41,7 +50,11 @@ let users: User[] = [
     phone: '9998887776',
     registrationDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
     status: 'active',
-    role: 'user'
+    role: 'user',
+    kycStatus: 'PENDING',
+    kycDocuments: [
+      { type: 'PAN', number: 'ABCDE1234F', submittedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() }
+    ]
   },
   {
     id: '3',
@@ -53,7 +66,8 @@ let users: User[] = [
     blockedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     blockedBy: 'admin_1',
     blockReason: 'Suspicious activity',
-    role: 'user'
+    role: 'user',
+    kycStatus: 'NOT_SUBMITTED'
   }
 ];
 
@@ -136,19 +150,34 @@ async function startServer() {
 
   // Razorpay Integration
   app.get("/api/payments/razorpay-key", (req, res) => {
-    res.json({ keyId: process.env.RAZORPAY_KEY_ID });
+    const keyId = process.env.RAZORPAY_KEY_ID;
+    if (!keyId) {
+      // Return a dummy key for demo purposes if not configured
+      return res.json({ keyId: "rzp_test_demo_key", isDemo: true });
+    }
+    res.json({ keyId, isDemo: false });
   });
 
   app.post("/api/payments/create-order", async (req, res) => {
     try {
       const { amount, currency = "INR" } = req.body;
+      const numericAmount = parseFloat(amount);
       
+      if (isNaN(numericAmount) || numericAmount <= 0) {
+        return res.status(400).json({ error: "Invalid amount" });
+      }
+
       const key_id = process.env.RAZORPAY_KEY_ID;
       const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
+      // If keys are missing, simulate order creation for demo
       if (!key_id || !key_secret) {
-        return res.status(500).json({ 
-          error: "Razorpay API keys are not configured. Please set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in environment variables." 
+        console.log("Razorpay keys missing, simulating order for demo");
+        return res.json({
+          id: `order_demo_${Date.now()}`,
+          amount: Math.round(numericAmount * 100),
+          currency,
+          isDemo: true
         });
       }
 
@@ -160,7 +189,7 @@ async function startServer() {
       });
 
       const options = {
-        amount: Math.round(amount * 100), // amount in smallest currency unit (paise for INR)
+        amount: Math.round(numericAmount * 100), // amount in smallest currency unit (paise for INR)
         currency,
         receipt: `receipt_${Date.now()}`,
       };
@@ -179,8 +208,42 @@ async function startServer() {
         razorpay_order_id, 
         razorpay_payment_id, 
         razorpay_signature,
-        amount 
+        amount,
+        isDemo
       } = req.body;
+
+      const numericAmount = parseFloat(amount);
+
+      // Handle Demo Verification
+      if (isDemo || !process.env.RAZORPAY_KEY_SECRET) {
+        console.log("Simulating payment verification for demo");
+        // In demo mode, we just accept it
+        userBalance += numericAmount;
+        const transaction = {
+          id: razorpay_payment_id || `pay_demo_${Date.now()}`,
+          type: 'DEPOSIT',
+          amount: numericAmount,
+          status: 'COMPLETED',
+          timestamp: new Date().toISOString()
+        };
+        transactions.push(transaction);
+
+        // Broadcast notification
+        const notification = {
+          id: `deposit_${Date.now()}`,
+          type: 'ACCOUNT',
+          title: 'Funds Added (Demo)',
+          message: `Successfully deposited $${numericAmount.toFixed(2)} to your account (Demo Mode).`,
+          timestamp: new Date().toISOString()
+        };
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: "NOTIFICATION", data: notification }));
+          }
+        });
+
+        return res.json({ status: "ok", balance: userBalance });
+      }
 
       const crypto = await import("crypto");
       const hmac = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET!);
@@ -189,11 +252,11 @@ async function startServer() {
 
       if (generated_signature === razorpay_signature) {
         // Payment is verified
-        userBalance += amount;
+        userBalance += numericAmount;
         const transaction = {
           id: razorpay_payment_id,
           type: 'DEPOSIT',
-          amount,
+          amount: numericAmount,
           status: 'COMPLETED',
           timestamp: new Date().toISOString()
         };
@@ -204,7 +267,7 @@ async function startServer() {
           id: `deposit_${Date.now()}`,
           type: 'ACCOUNT',
           title: 'Funds Added',
-          message: `Successfully deposited $${amount.toFixed(2)} to your account.`,
+          message: `Successfully deposited $${numericAmount.toFixed(2)} to your account.`,
           timestamp: new Date().toISOString()
         };
         wss.clients.forEach(client => {
@@ -266,6 +329,37 @@ async function startServer() {
     res.json(users);
   });
 
+  // Admin Stats Route
+  app.get("/api/admin/stats", (req, res) => {
+    const totalDeposits = transactions.filter(t => t.type === 'DEPOSIT').reduce((sum, t) => sum + t.amount, 0);
+    const totalWithdrawals = transactions.filter(t => t.type === 'WITHDRAW').reduce((sum, t) => sum + t.amount, 0);
+    
+    const stats = {
+      totalUsers: users.length,
+      activeNow: Math.floor(users.length * 0.4), // Simulated
+      totalDeposits,
+      totalWithdrawals,
+      revenue: totalDeposits * 0.02, // Simulated 2% fee
+      tradingVolume: totalDeposits * 5, // Simulated
+      totalOpenTrades: 12,
+      pendingWithdrawalsCount: transactions.filter(t => t.type === 'WITHDRAW' && t.status === 'PROCESSING').length,
+      pendingKycCount: users.filter(u => u.kycStatus === 'PENDING').length,
+      apiUsageCount: 1250,
+      failedLogins: 42,
+      downloads: {
+        total: 12500,
+        ios: 5800,
+        android: 6700
+      }
+    };
+    res.json(stats);
+  });
+
+  // Trade History Route
+  app.get("/api/user/trade-history", (req, res) => {
+    res.json(MOCK_TRADE_HISTORY);
+  });
+
   app.post("/api/admin/users/block", (req, res) => {
     const { userId, reason, adminId } = req.body;
     const userIndex = users.findIndex(u => u.id === userId);
@@ -304,6 +398,20 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/users/kyc-update", (req, res) => {
+    const { userId, status } = req.body;
+    const userIndex = users.findIndex(u => u.id === userId);
+    if (userIndex !== -1) {
+      users[userIndex] = {
+        ...users[userIndex],
+        kycStatus: status
+      };
+      res.json({ status: "ok", user: users[userIndex] });
+    } else {
+      res.status(404).json({ error: "User not found" });
+    }
+  });
+
   app.post("/api/auth/check-status", (req, res) => {
     const { identifier } = req.body; // email or phone
     const user = users.find(u => u.email === identifier || u.phone === identifier);
@@ -311,6 +419,16 @@ async function startServer() {
       res.json({ status: user.status, blockReason: user.blockReason });
     } else {
       res.json({ status: 'not_found' });
+    }
+  });
+
+  app.post("/api/auth/profile", (req, res) => {
+    const { identifier } = req.body;
+    const user = users.find(u => u.email === identifier || u.phone === identifier || u.id === identifier);
+    if (user) {
+      res.json(user);
+    } else {
+      res.status(404).json({ error: "User not found" });
     }
   });
 
@@ -336,7 +454,8 @@ async function startServer() {
       phone,
       registrationDate: new Date().toISOString(),
       status: 'active',
-      role: 'user'
+      role: 'user',
+      kycStatus: 'NOT_SUBMITTED'
     };
     users.push(newUser);
     res.json({ status: "ok", user: newUser });

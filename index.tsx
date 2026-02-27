@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import Layout from './components/Layout';
-import { AppScreen } from './types';
+import { AppScreen, User } from './types';
 import { NotificationProvider, useNotifications } from './components/NotificationProvider';
 import Login from './modules/Login';
 import ForgotPassword from './modules/ForgotPassword';
@@ -23,6 +23,7 @@ const AppContent: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem('kite_is_logged_in') === 'true';
   });
+  const [user, setUser] = useState<User | null>(null);
 
   const [currentScreen, setCurrentScreen] = useState<AppScreen>(() => {
     // Check if we have a forced session
@@ -62,39 +63,41 @@ const AppContent: React.FC = () => {
     return () => ws.close();
   }, [isLoggedIn, addNotification]);
 
-  // Periodic check for blocked status
+  // Fetch profile and check blocked status
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn) {
+      setUser(null);
+      return;
+    }
 
-    const checkBlockedStatus = async () => {
-      const userId = localStorage.getItem('kite_current_user_id');
-      if (!userId) return;
+    const fetchProfileAndStatus = async () => {
+      const identifier = localStorage.getItem('kite_current_user_id') || localStorage.getItem('kite_saved_userid');
+      if (!identifier) return;
 
       try {
-        const res = await fetch('/api/auth/check-status', {
+        const res = await fetch('/api/auth/profile', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: userId })
+          body: JSON.stringify({ identifier })
         });
         
-        if (!res.ok) return; // Silent fail for network/server errors during check
+        if (!res.ok) return;
 
         const data = await res.json();
+        setUser(data);
+
         if (data.status === 'blocked') {
           alert(`Your account has been blocked. Reason: ${data.blockReason || 'Violation of terms'}. You will be logged out.`);
           handleLogout();
         }
       } catch (err) {
-        // Only log if it's not a standard fetch failure (likely server restart)
-        if (err instanceof TypeError && err.message === 'Failed to fetch') {
-          return; 
-        }
-        console.error("Blocked status check error:", err);
+        if (err instanceof TypeError && err.message === 'Failed to fetch') return;
+        console.error("Profile fetch error:", err);
       }
     };
 
-    const interval = setInterval(checkBlockedStatus, 30000); // Check every 30 seconds
-    checkBlockedStatus(); // Initial check
+    const interval = setInterval(fetchProfileAndStatus, 30000);
+    fetchProfileAndStatus();
 
     return () => clearInterval(interval);
   }, [isLoggedIn]);
@@ -113,6 +116,7 @@ const AppContent: React.FC = () => {
     localStorage.removeItem('kite_current_screen');
     localStorage.removeItem('kite_is_logged_in');
     localStorage.removeItem('kite_current_user_id');
+    setUser(null);
     setCurrentScreen(AppScreen.LOGIN);
   };
 
@@ -123,39 +127,56 @@ const AppContent: React.FC = () => {
   // 1. Handle Admin Auth Screens
   if (currentScreen === AppScreen.ADMIN_LOGIN) {
     return (
-      <AdminLogin 
-        onLogin={(id) => handleLogin(true, id)} 
-        onForgot={() => setCurrentScreen(AppScreen.FORGOT_PASSWORD)} 
-        onSignUp={() => setCurrentScreen(AppScreen.ADMIN_SIGNUP)} 
-        onBackToUserLogin={() => setCurrentScreen(AppScreen.LOGIN)}
-      />
+      <div className="h-screen bg-gray-50 dark:bg-[#050505] flex items-center justify-center p-0 md:p-4">
+        <div className="w-full h-full md:h-[850px] md:max-w-[420px] md:rounded-[40px] md:shadow-2xl md:border-8 md:border-gray-200 dark:md:border-gray-800 overflow-hidden relative">
+          <AdminLogin 
+            onLogin={(id) => handleLogin(true, id)} 
+            onForgot={() => setCurrentScreen(AppScreen.FORGOT_PASSWORD)} 
+            onSignUp={() => setCurrentScreen(AppScreen.ADMIN_SIGNUP)} 
+            onBackToUserLogin={() => setCurrentScreen(AppScreen.LOGIN)}
+          />
+        </div>
+      </div>
     );
   }
 
   if (currentScreen === AppScreen.ADMIN_SIGNUP) {
     return (
-      <AdminSignUp 
-        onBack={() => setCurrentScreen(AppScreen.ADMIN_LOGIN)} 
-        onSignUpSuccess={(id) => handleLogin(true, id)} 
-      />
+      <div className="h-screen bg-gray-50 dark:bg-[#050505] flex items-center justify-center p-0 md:p-4">
+        <div className="w-full h-full md:h-[850px] md:max-w-[420px] md:rounded-[40px] md:shadow-2xl md:border-8 md:border-gray-200 dark:md:border-gray-800 overflow-hidden relative">
+          <AdminSignUp 
+            onBack={() => setCurrentScreen(AppScreen.ADMIN_LOGIN)} 
+            onSignUpSuccess={(id) => handleLogin(true, id)} 
+          />
+        </div>
+      </div>
     );
   }
 
   // 2. Handle standard auth if not logged in
   if (!isLoggedIn) {
+    let authComponent;
     if (currentScreen === AppScreen.FORGOT_PASSWORD) {
-      return <ForgotPassword onBack={() => setCurrentScreen(AppScreen.LOGIN)} />;
+      authComponent = <ForgotPassword onBack={() => setCurrentScreen(AppScreen.LOGIN)} />;
+    } else if (currentScreen === AppScreen.SIGN_UP) {
+      authComponent = <SignUp onBack={() => setCurrentScreen(AppScreen.LOGIN)} onSignUpSuccess={(id) => handleLogin(false, id)} onAdminSignUp={() => setCurrentScreen(AppScreen.ADMIN_SIGNUP)} />;
+    } else {
+      authComponent = (
+        <Login 
+          onLogin={(isAdmin, id) => handleLogin(isAdmin, id)} 
+          onForgot={() => setCurrentScreen(AppScreen.FORGOT_PASSWORD)} 
+          onSignUp={() => setCurrentScreen(AppScreen.SIGN_UP)} 
+          onToggleAdmin={() => navigate(AppScreen.ADMIN_LOGIN)}
+        />
+      );
     }
-    if (currentScreen === AppScreen.SIGN_UP) {
-      return <SignUp onBack={() => setCurrentScreen(AppScreen.LOGIN)} onSignUpSuccess={(id) => handleLogin(false, id)} onAdminSignUp={() => setCurrentScreen(AppScreen.ADMIN_SIGNUP)} />;
-    }
+
     return (
-      <Login 
-        onLogin={(isAdmin, id) => handleLogin(isAdmin, id)} 
-        onForgot={() => setCurrentScreen(AppScreen.FORGOT_PASSWORD)} 
-        onSignUp={() => setCurrentScreen(AppScreen.SIGN_UP)} 
-        onToggleAdmin={() => navigate(AppScreen.ADMIN_LOGIN)}
-      />
+      <div className="h-screen bg-gray-50 dark:bg-[#050505] flex items-center justify-center p-0 md:p-4">
+        <div className="w-full h-full md:h-[850px] md:max-w-[420px] md:rounded-[40px] md:shadow-2xl md:border-8 md:border-gray-200 dark:md:border-gray-800 overflow-hidden relative">
+          {authComponent}
+        </div>
+      </div>
     );
   }
 
@@ -180,13 +201,13 @@ const AppContent: React.FC = () => {
       case AppScreen.PORTFOLIO:
         return <Portfolio />;
       case AppScreen.ACCOUNT:
-        return <Account onNavigate={navigate} onLogout={handleLogout} />;
+        return <Account onNavigate={navigate} onLogout={handleLogout} user={user} />;
       case AppScreen.SETTINGS:
         return <Settings onBack={() => navigate(AppScreen.ACCOUNT)} />;
       case AppScreen.FUNDS:
         return <Funds onBack={() => navigate(AppScreen.ACCOUNT)} />;
       case AppScreen.PROFILE:
-        return <Profile onBack={() => navigate(AppScreen.ACCOUNT)} />;
+        return <Profile onBack={() => navigate(AppScreen.ACCOUNT)} user={user} />;
       case AppScreen.NOTIFICATIONS:
         return <Notifications onBack={() => navigate(AppScreen.ACCOUNT)} />;
       case AppScreen.BIDS:

@@ -105,26 +105,45 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
     }
   };
 
-  const handlePayProcessingFee = () => {
+  const handlePayProcessingFee = async () => {
     if (balance < FEE_AMOUNT) {
       alert("Insufficient balance to pay the processing fee.");
       return;
     }
 
     setIsProcessing(true);
-    setTimeout(() => {
-      setBalance(prev => prev - FEE_AMOUNT);
-      fetchTransactions();
-      setIsFeePaid(true);
+    try {
+      const res = await fetch('/api/user/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          amount: FEE_AMOUNT,
+          bankDetails: { type: 'FEE_PAYMENT', reason: 'Processing Fee' }
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setBalance(data.balance);
+        fetchTransactions();
+        setIsFeePaid(true);
+        localStorage.setItem('kite_withdrawal_fee_paid', 'true');
+        setIsSuccess(true);
+        setTimeout(() => {
+          setShowFeePrompt(false);
+          setIsSuccess(false);
+          setTimeout(() => setShowLockedStatus(true), 500);
+        }, 2000);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to process fee payment.");
+      }
+    } catch (err) {
+      console.error("Fee payment error:", err);
+      alert("Network error. Please try again.");
+    } finally {
       setIsProcessing(false);
-      setIsSuccess(true);
-      setTimeout(() => {
-        setShowFeePrompt(false);
-        setIsSuccess(false);
-        // Automatically show the locked status after paying the fee
-        setTimeout(() => setShowLockedStatus(true), 500);
-      }, 2000);
-    }, 2000);
+    }
   };
 
   const handleAddFundsClick = () => {
@@ -156,7 +175,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
 
       // 1. Get Razorpay Key
       const keyRes = await fetch('/api/payments/razorpay-key');
-      const { keyId } = await keyRes.json();
+      const { keyId, isDemo: keyIsDemo } = await keyRes.json();
 
       if (!keyId) {
         throw new Error("Razorpay Key ID not found. Please configure environment variables.");
@@ -172,13 +191,15 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
       const order = await orderRes.json();
       if (order.error) throw new Error(order.error);
 
+      const isDemo = keyIsDemo || order.isDemo;
+
       // 3. Initialize Razorpay Checkout
       const options = {
         key: keyId,
         amount: order.amount,
         currency: order.currency,
         name: "KiteTrade Pro",
-        description: "Add Funds to Wallet",
+        description: isDemo ? "DEMO MODE - No real money charged" : "Add Funds to Wallet",
         order_id: order.id,
         handler: async function (response: any) {
           try {
@@ -190,7 +211,8 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
-                amount: amount
+                amount: amount,
+                isDemo: isDemo
               })
             });
 
@@ -219,7 +241,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
           contact: "9999999999"
         },
         theme: {
-          color: "#387ed1"
+          color: isDemo ? "#f59e0b" : "#387ed1"
         },
         modal: {
           ondismiss: function() {
@@ -227,6 +249,10 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
           }
         }
       };
+
+      if (isDemo) {
+        console.log("Running in Razorpay Demo Mode");
+      }
 
       const rzp = new Razorpay(options);
       rzp.open();

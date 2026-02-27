@@ -7,25 +7,43 @@
     <meta name="theme-color" content="#387ed1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="KiteTrade">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/2502/2502544.png">
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" href="https://cdn-icons-png.flaticon.com/512/2502/2502544.png">
     <title>KiteTrade Pro</title>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         darkMode: 'class',
         theme: {
           extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
             colors: {
-              brand: '#387ed1',
+              brand: {
+                50: '#f0f7ff',
+                100: '#e0effe',
+                200: '#bae0fd',
+                300: '#7cc8fb',
+                400: '#387ed1',
+                500: '#2563eb',
+                600: '#1d4ed8',
+                700: '#1e40af',
+                800: '#1e3a8a',
+                900: '#1c3577',
+              },
               zerodhaBlue: '#387ed1',
-              kiteGreen: '#4caf50',
-              kiteRed: '#df514c'
+              kiteGreen: '#10b981',
+              kiteRed: '#ef4444'
             },
             animation: {
               'shake': 'shake 0.4s cubic-bezier(.36,.07,.19,.97) both',
+              'fade-in': 'fadeIn 0.3s ease-out',
+              'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
             },
             keyframes: {
               shake: {
@@ -33,6 +51,14 @@
                 '20%, 80%': { transform: 'translate3d(2px, 0, 0)' },
                 '30%, 50%, 70%': { transform: 'translate3d(-4px, 0, 0)' },
                 '40%, 60%': { transform: 'translate3d(4px, 0, 0)' },
+              },
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { transform: 'translateY(10px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
               }
             }
           }
@@ -51,52 +77,67 @@
             height: 100%;
             margin: 0;
             padding: 0;
-            background-color: #f8f9fa;
-            color: #444;
-            font-family: 'Roboto', sans-serif;
+            background-color: #ffffff;
+            color: #111827;
+            font-family: 'Inter', sans-serif;
             overflow: hidden;
             -webkit-overflow-scrolling: touch;
             overscroll-behavior-y: none;
         }
-        .dark body { background-color: #000000; color: #eee; }
+        .dark body { background-color: #000000; color: #f9fafb; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .screen-fade-in { animation: fadeIn 0.2s ease-out; }
+        .screen-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .bottom-sheet-enter { animation: slideUp 0.3s cubic-bezier(0.1, 0.7, 0.1, 1); }
+        .bottom-sheet-enter { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .kite-switch {
-            width: 36px;
-            height: 20px;
-            background-color: #ccc;
-            border-radius: 10px;
+            width: 40px;
+            height: 22px;
+            background-color: #e5e7eb;
+            border-radius: 11px;
             position: relative;
-            transition: background-color 0.2s;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
+        .dark .kite-switch { background-color: #374151; }
         .kite-switch.active { background-color: #387ed1; }
         .kite-switch::after {
             content: '';
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             background-color: white;
             border-radius: 50%;
             position: absolute;
             top: 2px;
             left: 2px;
-            transition: left 0.2s;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
-        .kite-switch.active::after { left: 18px; }
+        .kite-switch.active::after { left: 20px; }
         #root {
             height: 100%;
             padding-bottom: env(safe-area-inset-bottom);
         }
+        /* Glassmorphism effects */
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .dark .glass {
+            background: rgba(0, 0, 0, 0.7);
+        }
+        /* Custom shadows */
+        .shadow-soft {
+            box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
+        }
         /* Desktop background */
         @media (min-width: 768px) {
             body {
-                background-color: #f0f2f5;
+                background-color: #f9fafb;
             }
             .dark body {
-                background-color: #0a0a0a;
+                background-color: #050505;
             }
         }
     </style>

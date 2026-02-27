@@ -14,7 +14,8 @@ import {
   AlertCircle,
   History,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Shield
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -31,7 +32,21 @@ import { GoogleGenAI } from "@google/genai";
 const Portfolio: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'holdings' | 'positions' | 'history'>('holdings');
   const [holdings, setHoldings] = useState<Holding[]>(MOCK_HOLDINGS);
-  const [tradeHistory, setTradeHistory] = useState<Order[]>(MOCK_TRADE_HISTORY);
+  const [tradeHistory, setTradeHistory] = useState<Order[]>([]);
+  useEffect(() => {
+    const fetchTradeHistory = async () => {
+      try {
+        const res = await fetch('/api/user/trade-history');
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setTradeHistory(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch trade history:", err);
+      }
+    };
+    fetchTradeHistory();
+  }, []);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +54,8 @@ const Portfolio: React.FC = () => {
   const [tradeType, setTradeType] = useState<'BUY' | 'SELL' | null>(null);
   const [tradeQuantity, setTradeQuantity] = useState<string>('');
   const [tradeStopLoss, setTradeStopLoss] = useState<string>('');
+  const [isSettingSL, setIsSettingSL] = useState<Holding | null>(null);
+  const [tempSL, setTempSL] = useState<string>('');
 
   useEffect(() => {
     let socket: WebSocket | null = null;
@@ -54,28 +71,63 @@ const Portfolio: React.FC = () => {
           const message = JSON.parse(event.data);
           if (message.type === 'UPDATE' || message.type === 'INITIAL_STATE') {
             const stocks: Stock[] = message.data;
-            setHoldings(prev => prev.map(holding => {
-              const stock = stocks.find(s => s.symbol === holding.symbol);
-              if (stock) {
-                const currentValue = stock.ltp * holding.quantity;
+            setHoldings(prev => {
+              let updated = [...prev];
+              const triggers: Holding[] = [];
+
+              updated = updated.map(holding => {
+                const stock = stocks.find(s => s.symbol === holding.symbol);
+                if (stock) {
+                  const currentValue = stock.ltp * holding.quantity;
+                  
+                  // Check Stop-Loss
+                  if (holding.stopLoss && stock.ltp <= holding.stopLoss) {
+                    triggers.push({ ...holding, ltp: stock.ltp });
+                  }
+
+                  return {
+                    ...holding,
+                    ltp: stock.ltp,
+                    currentValue: currentValue,
+                    totalPnL: currentValue - holding.investedValue,
+                    isUp: stock.isUp
+                  };
+                }
+                return holding;
+              });
+
+              if (triggers.length > 0) {
+                triggers.forEach(h => {
+                  const sellOrder: Order = {
+                    id: `sl-${Date.now()}-${h.symbol}`,
+                    symbol: h.symbol,
+                    type: 'SELL',
+                    status: 'COMPLETED',
+                    price: h.ltp,
+                    quantity: h.quantity,
+                    time: new Date().toLocaleString('en-US', { 
+                      year: 'numeric', 
+                      month: 'short', 
+                      day: 'numeric', 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    }) + ' (Auto SL)'
+                  };
+                  setTradeHistory(prevHistory => [sellOrder, ...prevHistory]);
+                });
                 
-                // Check Stop-Loss
-                if (holding.stopLoss && stock.ltp <= holding.stopLoss) {
-                  alert(`STOP-LOSS TRIGGERED: ${holding.symbol} has dropped to ${stock.ltp}. Your stop-loss was set at ${holding.stopLoss}.`);
-                  // Optionally clear stop-loss after trigger to avoid repeated alerts
-                  holding.stopLoss = undefined;
+                // Show a combined alert or notification if possible, but for now alert is fine
+                if (triggers.length === 1) {
+                  alert(`AUTO-SELL TRIGGERED: ${triggers[0].symbol} sold at ${triggers[0].ltp} (Stop-Loss: ${triggers[0].stopLoss})`);
+                } else {
+                  alert(`AUTO-SELL TRIGGERED for ${triggers.length} holdings due to stop-loss breach.`);
                 }
 
-                return {
-                  ...holding,
-                  ltp: stock.ltp,
-                  currentValue: currentValue,
-                  totalPnL: currentValue - holding.investedValue,
-                  isUp: stock.isUp
-                };
+                return updated.filter(h => !triggers.some(t => t.symbol === h.symbol));
               }
-              return holding;
-            }));
+
+              return updated;
+            });
           }
         } catch (err) {
           console.error('WebSocket message error:', err);
@@ -104,6 +156,28 @@ const Portfolio: React.FC = () => {
     setTradeType(type);
     setTradeQuantity('');
     setTradeStopLoss(holding.stopLoss?.toString() || '');
+  };
+
+  const handleOpenSLModal = (holding: Holding) => {
+    setIsSettingSL(holding);
+    setTempSL(holding.stopLoss?.toString() || '');
+  };
+
+  const handleSaveSL = () => {
+    if (!isSettingSL) return;
+    const sl = parseFloat(tempSL);
+    
+    if (!isNaN(sl) && sl > 0 && sl >= isSettingSL.ltp) {
+      alert("Stop-loss must be lower than the current market price (LTP).");
+      return;
+    }
+
+    setHoldings(prev => prev.map(h => 
+      h.symbol === isSettingSL.symbol 
+        ? { ...h, stopLoss: !isNaN(sl) && sl > 0 ? sl : undefined } 
+        : h
+    ));
+    setIsSettingSL(null);
   };
 
   const handleConfirmTrade = () => {
@@ -212,7 +286,7 @@ const Portfolio: React.FC = () => {
     setAnalysisResult(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const portfolioData = holdings.map(h => ({ pair: h.symbol, currentPnL: h.totalPnL }));
       const prompt = `Act as a senior Forex Portfolio Analyst. Analyze this portfolio concisely: ${JSON.stringify(portfolioData)}. 3 bullet points, under 80 words.`;
       const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
@@ -226,63 +300,63 @@ const Portfolio: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-black transition-colors">
-      <div className="sticky top-0 bg-white dark:bg-black z-40">
-        <div className="flex px-4 border-b border-gray-100 dark:border-gray-900">
+      <div className="sticky top-0 bg-white/80 dark:bg-black/80 backdrop-blur-md z-40">
+        <div className="flex px-2 border-b border-gray-100 dark:border-gray-900">
           <button 
             onClick={() => setActiveTab('holdings')}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-all ${activeTab === 'holdings' ? 'border-[#387ed1] text-[#387ed1]' : 'border-transparent text-gray-500'}`}
+            className={`flex-1 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'holdings' ? 'border-brand-500 text-brand-500' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
           >
             Holdings ({holdings.length})
           </button>
           <button 
             onClick={() => setActiveTab('positions')}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-all ${activeTab === 'positions' ? 'border-[#387ed1] text-[#387ed1]' : 'border-transparent text-gray-500'}`}
+            className={`flex-1 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'positions' ? 'border-brand-500 text-brand-500' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
           >
             Positions (0)
           </button>
           <button 
             onClick={() => setActiveTab('history')}
-            className={`flex-1 py-3 text-sm font-medium border-b-2 transition-all ${activeTab === 'history' ? 'border-[#387ed1] text-[#387ed1]' : 'border-transparent text-gray-500'}`}
+            className={`flex-1 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'history' ? 'border-brand-500 text-brand-500' : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
           >
-            Trade History
+            History
           </button>
         </div>
       </div>
 
-      <div className="p-4 space-y-4 flex-1 overflow-y-auto hide-scrollbar pb-40">
+      <div className="p-5 space-y-6 flex-1 overflow-y-auto hide-scrollbar pb-48">
         {activeTab === 'history' ? (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="flex justify-between items-center mb-2">
-              <h3 className="text-sm font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                <History size={16} className="text-[#387ed1]" />
-                Recent Transactions
+              <h3 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2 uppercase tracking-tight">
+                <History size={18} className="text-brand-500" />
+                Recent Activity
               </h3>
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{tradeHistory.length} Trades</span>
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest bg-gray-100 dark:bg-gray-900 px-2 py-1 rounded-full">{tradeHistory.length} Trades</span>
             </div>
             
             {tradeHistory.length > 0 ? (
-              <div className="divide-y divide-gray-50 dark:divide-gray-900 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-900 overflow-hidden">
+              <div className="divide-y divide-gray-50 dark:divide-gray-900/50 bg-white dark:bg-gray-900/30 rounded-2xl border border-gray-100 dark:border-gray-900 overflow-hidden shadow-soft">
                 {tradeHistory.map((trade) => (
-                  <div key={trade.id} className="p-4 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${trade.type === 'BUY' ? 'bg-green-50 dark:bg-green-900/20 text-green-600' : 'bg-red-50 dark:bg-red-900/20 text-red-600'}`}>
-                        {trade.type === 'BUY' ? <ArrowUpRight size={20} /> : <ArrowDownRight size={20} />}
+                  <div key={trade.id} className="p-5 flex justify-between items-center hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                    <div className="flex items-center gap-4">
+                      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${trade.type === 'BUY' ? 'bg-kiteGreen/10 text-kiteGreen' : 'bg-kiteRed/10 text-kiteRed'}`}>
+                        {trade.type === 'BUY' ? <ArrowUpRight size={22} /> : <ArrowDownRight size={22} />}
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-gray-800 dark:text-gray-100">{trade.symbol}</span>
-                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${trade.type === 'BUY' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'}`}>
+                          <span className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">{trade.symbol}</span>
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${trade.type === 'BUY' ? 'bg-kiteGreen/10 text-kiteGreen' : 'bg-kiteRed/10 text-kiteRed'}`}>
                             {trade.type}
                           </span>
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-0.5 font-medium">{trade.time}</p>
+                        <p className="text-[11px] text-gray-400 mt-1 font-bold uppercase tracking-tighter">{trade.time}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                      <p className="text-base font-bold text-gray-900 dark:text-gray-100 tabular-nums">
                         {trade.quantity.toLocaleString()} @ {trade.price.toFixed(4)}
                       </p>
-                      <p className="text-[11px] font-bold text-gray-500 dark:text-gray-400 mt-0.5">
+                      <p className="text-xs font-black text-gray-400 mt-1 tabular-nums">
                         ${(trade.quantity * trade.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                     </div>
@@ -290,33 +364,33 @@ const Portfolio: React.FC = () => {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-300">
-                <History size={40} className="opacity-20 mb-3" />
-                <p className="text-sm font-medium uppercase tracking-widest">No Trade History</p>
+              <div className="flex flex-col items-center justify-center py-24 text-gray-300">
+                <History size={48} className="opacity-20 mb-4" />
+                <p className="text-sm font-black uppercase tracking-widest">No Trade History</p>
               </div>
             )}
           </div>
         ) : (
           <>
             {/* Summary Card */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl p-5 border border-gray-100 dark:border-gray-900 transition-colors">
-          <div className="grid grid-cols-2 gap-y-4">
+        <div className="bg-white dark:bg-gray-900 rounded-[28px] p-6 border border-gray-100 dark:border-gray-900 shadow-soft transition-all">
+          <div className="grid grid-cols-2 gap-y-6">
             <div>
-              <p className="text-[11px] text-gray-400 uppercase font-bold mb-1">Invested</p>
-              <p className="text-[17px] font-bold text-gray-800 dark:text-gray-100">${totalInvested.toLocaleString('en-US')}</p>
+              <p className="text-[11px] text-gray-400 uppercase font-black tracking-widest mb-1.5">Invested</p>
+              <p className="text-xl font-black text-gray-900 dark:text-gray-100 tabular-nums tracking-tighter">${totalInvested.toLocaleString('en-US')}</p>
             </div>
             <div className="text-right">
-              <p className="text-[11px] text-gray-400 uppercase font-bold mb-1">Current</p>
-              <p className="text-[17px] font-bold text-gray-800 dark:text-gray-100">${currentValue.toLocaleString('en-US')}</p>
+              <p className="text-[11px] text-gray-400 uppercase font-black tracking-widest mb-1.5">Current</p>
+              <p className="text-xl font-black text-gray-900 dark:text-gray-100 tabular-nums tracking-tighter">${currentValue.toLocaleString('en-US')}</p>
             </div>
-            <div className="col-span-2 pt-4 border-t border-gray-50 dark:border-gray-900">
+            <div className="col-span-2 pt-6 border-t border-gray-50 dark:border-gray-900/50">
               <div className="flex justify-between items-center">
-                <p className="text-[13px] font-bold text-gray-400 uppercase">Total P&L</p>
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Total P&L</p>
                 <div className="text-right">
-                  <p className={`text-[17px] font-bold ${totalPnL >= 0 ? 'text-[#4caf50]' : 'text-[#df514c]'}`}>
+                  <p className={`text-2xl font-black tracking-tighter tabular-nums ${totalPnL >= 0 ? 'text-kiteGreen' : 'text-kiteRed'}`}>
                     {totalPnL >= 0 ? '+' : ''}{totalPnL.toLocaleString('en-US')}
                   </p>
-                  <p className={`text-[11px] font-bold ${totalPnL >= 0 ? 'text-[#4caf50]' : 'text-[#df514c]'}`}>
+                  <p className={`text-xs font-black mt-1 ${totalPnL >= 0 ? 'text-kiteGreen' : 'text-kiteRed'}`}>
                     {totalPnL >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
                   </p>
                 </div>
@@ -326,28 +400,28 @@ const Portfolio: React.FC = () => {
         </div>
 
         {/* Historical P&L Chart */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl p-5 border border-gray-100 dark:border-gray-900 transition-colors">
-          <h3 className="text-[11px] text-gray-400 uppercase font-bold mb-4 tracking-widest">7-Day P&L History</h3>
-          <div className="h-40 w-full">
+        <div className="bg-white dark:bg-gray-900 rounded-[28px] p-6 border border-gray-100 dark:border-gray-900 shadow-soft transition-all">
+          <h3 className="text-[11px] text-gray-400 uppercase font-black mb-6 tracking-widest">Performance History</h3>
+          <div className="h-44 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={historicalPnL}>
                 <XAxis 
                   dataKey="day" 
                   axisLine={false} 
                   tickLine={false} 
-                  tick={{ fontSize: 10, fill: '#9ca3af' }}
+                  tick={{ fontSize: 10, fill: '#9ca3af', fontWeight: 700 }}
                 />
                 <YAxis 
                   hide
                   domain={['auto', 'auto']}
                 />
                 <RechartsTooltip 
-                  cursor={{ fill: 'transparent' }}
+                  cursor={{ fill: 'rgba(0,0,0,0.02)' }}
                   content={({ active, payload }) => {
                     if (active && payload && payload.length) {
                       const val = payload[0].value as number;
                       return (
-                        <div className="bg-gray-800 text-white px-2 py-1 rounded text-[10px] font-bold shadow-xl">
+                        <div className="bg-gray-900 text-white px-3 py-1.5 rounded-xl text-[11px] font-black shadow-2xl border border-white/10">
                           {val >= 0 ? '+' : ''}${val.toLocaleString()}
                         </div>
                       );
@@ -355,12 +429,12 @@ const Portfolio: React.FC = () => {
                     return null;
                   }}
                 />
-                <Bar dataKey="pnl" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="pnl" radius={[6, 6, 6, 6]} barSize={32}>
                   {historicalPnL.map((entry, index) => (
                     <Cell 
                       key={`cell-${index}`} 
-                      fill={entry.pnl >= 0 ? '#4caf50' : '#df514c'} 
-                      fillOpacity={0.8}
+                      fill={entry.pnl >= 0 ? '#10b981' : '#ef4444'} 
+                      fillOpacity={0.9}
                     />
                   ))}
                 </Bar>
@@ -370,48 +444,59 @@ const Portfolio: React.FC = () => {
         </div>
 
         {/* Holdings List */}
-        <div className="divide-y divide-gray-100 dark:divide-gray-900">
+        <div className="divide-y divide-gray-50 dark:divide-gray-900/50">
           {holdings.length > 0 ? (
             holdings.map((holding) => (
               <div 
                 key={holding.symbol} 
-                className="py-5 flex flex-col active:bg-gray-50 dark:active:bg-gray-900 cursor-pointer"
+                className="py-6 flex flex-col active:bg-gray-50 dark:active:bg-gray-900 cursor-pointer group"
               >
-                <div className="flex justify-between items-center mb-3">
+                <div className="flex justify-between items-start mb-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[15px] font-medium text-gray-800 dark:text-gray-200">{holding.symbol}</span>
-                      <span className="text-[10px] font-bold text-gray-400 uppercase bg-gray-50 dark:bg-gray-900 px-1 py-0.5 rounded">Qty. {holding.quantity}</span>
+                      <span className="text-lg font-black text-gray-900 dark:text-gray-100 tracking-tight italic uppercase">{holding.symbol}</span>
+                      <span className="text-[10px] font-black text-gray-400 uppercase bg-gray-100 dark:bg-gray-900 px-2 py-0.5 rounded-full">Qty. {holding.quantity}</span>
+                      {holding.stopLoss && (
+                        <span className="text-[10px] font-black text-red-500 uppercase bg-red-500/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <Shield size={10} /> SL {holding.stopLoss.toFixed(4)}
+                        </span>
+                      )}
                       <button 
                         onClick={(e) => { e.stopPropagation(); handleDeleteHolding(holding.symbol); }}
-                        className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+                        className="p-1.5 text-gray-300 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
                       >
-                        <Trash2 size={12} />
+                        <Trash2 size={14} />
                       </button>
                     </div>
-                    <p className="text-[11px] text-gray-400 mt-1 uppercase font-medium">Avg. {holding.avgPrice.toFixed(4)}</p>
+                    <p className="text-[11px] text-gray-400 mt-1.5 uppercase font-bold tracking-widest">Avg. {holding.avgPrice.toFixed(4)}</p>
                   </div>
                   <div className="text-right flex flex-col items-end">
-                    <div className={`flex items-center gap-1 px-2 py-1 rounded-md mb-1 ${holding.totalPnL >= 0 ? 'bg-[#4caf50]/10 text-[#4caf50]' : 'bg-[#df514c]/10 text-[#df514c]'}`}>
-                      {holding.totalPnL >= 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                      <span className="text-[14px] font-bold">
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl mb-1.5 font-black tabular-nums ${holding.totalPnL >= 0 ? 'bg-kiteGreen/10 text-kiteGreen' : 'bg-kiteRed/10 text-kiteRed'}`}>
+                      {holding.totalPnL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                      <span className="text-base tracking-tight">
                         {holding.totalPnL >= 0 ? '+' : ''}{holding.totalPnL.toFixed(2)}
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-400 uppercase font-medium">LTP {holding.ltp.toFixed(4)}</p>
+                    <p className="text-[11px] text-gray-400 uppercase font-bold tracking-widest">LTP {holding.ltp.toFixed(4)}</p>
                   </div>
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <button 
                     onClick={(e) => { e.stopPropagation(); handleTrade(holding, 'BUY'); }}
-                    className="flex-1 bg-[#387ed1]/10 text-[#387ed1] py-3 rounded-lg text-xs font-bold uppercase tracking-wider active:scale-95 transition-all"
+                    className="flex-1 bg-brand-500/10 text-brand-500 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all hover:bg-brand-500 hover:text-white"
                   >
                     Buy More
                   </button>
                   <button 
+                    onClick={(e) => { e.stopPropagation(); handleOpenSLModal(holding); }}
+                    className="flex-1 bg-gray-100 dark:bg-gray-900 text-gray-500 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all hover:bg-gray-200 dark:hover:bg-gray-800 flex items-center justify-center gap-2"
+                  >
+                    <Shield size={14} /> {holding.stopLoss ? 'Edit SL' : 'Set SL'}
+                  </button>
+                  <button 
                     onClick={(e) => { e.stopPropagation(); handleTrade(holding, 'SELL'); }}
-                    className="flex-1 bg-[#df514c]/10 text-[#df514c] py-3 rounded-lg text-xs font-bold uppercase tracking-wider active:scale-95 transition-all"
+                    className="flex-1 bg-kiteRed/10 text-kiteRed py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all hover:bg-kiteRed hover:text-white"
                   >
                     Sell / Exit
                   </button>
@@ -419,21 +504,21 @@ const Portfolio: React.FC = () => {
               </div>
             ))
           ) : (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-300">
-              <Inbox size={40} className="opacity-20 mb-3" />
-              <p className="text-sm font-medium uppercase tracking-widest">Empty Portfolio</p>
-              <button onClick={handleResetHoldings} className="mt-4 text-[#387ed1] text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
-                 <RefreshCcw size={12} /> Load Defaults
+            <div className="flex flex-col items-center justify-center py-24 text-gray-300">
+              <Inbox size={48} className="opacity-20 mb-4" />
+              <p className="text-sm font-black uppercase tracking-widest">Empty Portfolio</p>
+              <button onClick={handleResetHoldings} className="mt-6 text-brand-500 text-[11px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-brand-500/10 px-4 py-2 rounded-full transition-all">
+                 <RefreshCcw size={14} /> Load Defaults
               </button>
             </div>
           )}
-          <div className="p-6 flex justify-center">
+          <div className="p-8 flex justify-center">
             <button 
               onClick={handleClearHoldings}
               disabled={holdings.length === 0 && tradeHistory.length === 0}
-              className="flex items-center gap-2 text-gray-400 hover:text-red-500 text-[10px] font-black uppercase tracking-widest transition-colors disabled:opacity-30 disabled:hover:text-gray-400"
+              className="flex items-center gap-2 text-gray-400 hover:text-red-500 text-[11px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:hover:text-gray-400"
             >
-              <Trash2 size={14} /> Clear All Data
+              <Trash2 size={16} /> Clear All Data
             </button>
           </div>
         </div>
@@ -443,19 +528,19 @@ const Portfolio: React.FC = () => {
       
       {/* Footer P&L & AI button */}
       {activeTab !== 'history' && (
-        <div className="fixed bottom-16 left-0 right-0 bg-white dark:bg-black border-t border-gray-100 dark:border-gray-900 px-6 py-4 flex justify-between items-center z-40 max-w-md mx-auto">
+        <div className="fixed bottom-20 left-0 right-0 glass border-t border-gray-100/50 dark:border-gray-900/50 px-8 py-5 flex justify-between items-center z-40 max-w-md mx-auto rounded-t-3xl shadow-2xl">
           <div>
-            <p className="text-[11px] text-gray-400 font-bold uppercase tracking-tight">Total P&L</p>
-            <p className={`text-[17px] font-bold ${totalPnL >= 0 ? 'text-[#4caf50]' : 'text-[#df514c]'}`}>
+            <p className="text-[11px] text-gray-400 font-black uppercase tracking-widest mb-1">Total P&L</p>
+            <p className={`text-xl font-black tracking-tighter tabular-nums ${totalPnL >= 0 ? 'text-kiteGreen' : 'text-kiteRed'}`}>
               {totalPnL >= 0 ? '+' : ''}${totalPnL.toLocaleString('en-US')}
             </p>
           </div>
           <button 
             onClick={handleAnalyze}
-            className="bg-[#387ed1] text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center gap-2"
+            className="bg-brand-500 text-white px-6 py-3.5 rounded-2xl font-black text-xs shadow-xl shadow-brand-500/25 active:scale-95 transition-all flex items-center gap-2 uppercase tracking-widest"
           >
             {isAnalyzing ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-            ANALYZE
+            Analyze
           </button>
         </div>
       )}
@@ -536,6 +621,68 @@ const Portfolio: React.FC = () => {
                 >
                   CONFIRM {tradeType}
                 </button>
+              </div>
+           </div>
+        </div>
+      )}
+
+      {/* Stop-Loss Modal */}
+      {isSettingSL && (
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-end" onClick={() => setIsSettingSL(null)}>
+           <div className="bg-white dark:bg-black w-full rounded-t-3xl p-8 bottom-sheet-enter pb-12" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
+                    Set Stop-Loss
+                  </h2>
+                  <p className="text-sm text-gray-400 mt-1">{isSettingSL.symbol} • LTP: ${isSettingSL.ltp.toFixed(4)}</p>
+                </div>
+                <button onClick={() => setIsSettingSL(null)} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
+                  <X size={20} className="text-gray-500" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div>
+                  <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Trigger Price</label>
+                  <input 
+                    type="number" 
+                    value={tempSL}
+                    onChange={(e) => setTempSL(e.target.value)}
+                    placeholder="Enter SL price"
+                    className={`w-full bg-gray-50 dark:bg-gray-900 border-none rounded-xl py-4 px-5 text-lg font-bold focus:ring-2 transition-all ${
+                      tempSL && parseFloat(tempSL) >= isSettingSL.ltp 
+                        ? 'focus:ring-red-500 text-red-500' 
+                        : 'focus:ring-brand-500'
+                    }`}
+                    autoFocus
+                  />
+                  {tempSL && parseFloat(tempSL) >= isSettingSL.ltp ? (
+                    <p className="text-[10px] text-red-500 mt-2 font-bold uppercase tracking-tighter flex items-center gap-1">
+                      <AlertCircle size={10} /> Must be lower than LTP (${isSettingSL.ltp.toFixed(4)})
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-gray-400 mt-2 font-medium">Automatic sell will trigger if price falls to or below this value.</p>
+                  )}
+                </div>
+
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => { setTempSL(''); }}
+                    className="flex-1 py-4 rounded-xl font-bold text-gray-500 bg-gray-100 dark:bg-gray-900 transition-all active:scale-95"
+                  >
+                    CLEAR SL
+                  </button>
+                  <button 
+                    onClick={handleSaveSL}
+                    disabled={
+                      (tempSL !== '' && parseFloat(tempSL) >= isSettingSL.ltp)
+                    }
+                    className="flex-[2] py-4 rounded-xl font-bold text-lg bg-brand-500 text-white shadow-xl shadow-brand-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:shadow-none"
+                  >
+                    SAVE STOP-LOSS
+                  </button>
+                </div>
               </div>
            </div>
         </div>
