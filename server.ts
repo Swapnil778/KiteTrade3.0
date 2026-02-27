@@ -3,7 +3,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, WebSocket } from "ws";
 import http from "http";
-import { User } from "./types";
+import { User, Transaction, Order } from "./types";
 
 // Mock data for initial state
 const MOCK_WATCHLIST = [
@@ -25,11 +25,22 @@ const MOCK_TRADE_HISTORY = [
 let currentStocks = [...MOCK_WATCHLIST];
 
 // In-memory user state (for demo purposes)
-let userBalance = 10000; // Starting balance
-const transactions: any[] = [];
+const transactions: Transaction[] = [];
 
 // User Management State
 let users: User[] = [
+  {
+    id: 'demo_user',
+    fullName: 'Demo User',
+    email: 'demo@kitetrade.pro',
+    phone: 'demo',
+    registrationDate: new Date().toISOString(),
+    status: 'active',
+    role: 'user',
+    kycStatus: 'VERIFIED',
+    balance: 10000,
+    trades: []
+  },
   {
     id: '1',
     fullName: 'John Doe',
@@ -39,6 +50,8 @@ let users: User[] = [
     status: 'active',
     role: 'user',
     kycStatus: 'VERIFIED',
+    balance: 25000,
+    trades: [],
     kycDocuments: [
       { type: 'AADHAAR', number: '1234-5678-9012', submittedAt: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString() }
     ]
@@ -52,6 +65,8 @@ let users: User[] = [
     status: 'active',
     role: 'user',
     kycStatus: 'PENDING',
+    balance: 5000,
+    trades: [],
     kycDocuments: [
       { type: 'PAN', number: 'ABCDE1234F', submittedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() }
     ]
@@ -67,7 +82,9 @@ let users: User[] = [
     blockedBy: 'admin_1',
     blockReason: 'Suspicious activity',
     role: 'user',
-    kycStatus: 'NOT_SUBMITTED'
+    kycStatus: 'NOT_SUBMITTED',
+    balance: 0,
+    trades: []
   }
 ];
 
@@ -141,11 +158,19 @@ async function startServer() {
 
   // Balance and Transactions
   app.get("/api/user/balance", (req, res) => {
-    res.json({ balance: userBalance });
+    const userId = req.query.userId as string;
+    const user = users.find(u => u.id === userId || u.phone === userId || u.email === userId);
+    if (user) {
+      res.json({ balance: user.balance });
+    } else {
+      res.status(404).json({ error: "User not found" });
+    }
   });
 
   app.get("/api/user/transactions", (req, res) => {
-    res.json(transactions);
+    const userId = req.query.userId as string;
+    const userTransactions = transactions.filter(t => t.userId === userId);
+    res.json(userTransactions);
   });
 
   // Razorpay Integration
@@ -209,18 +234,26 @@ async function startServer() {
         razorpay_payment_id, 
         razorpay_signature,
         amount,
-        isDemo
+        isDemo,
+        userId
       } = req.body;
 
       const numericAmount = parseFloat(amount);
+      const user = users.find(u => u.id === userId || u.phone === userId || u.email === userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
 
       // Handle Demo Verification
       if (isDemo || !process.env.RAZORPAY_KEY_SECRET) {
         console.log("Simulating payment verification for demo");
         // In demo mode, we just accept it
-        userBalance += numericAmount;
-        const transaction = {
+        user.balance += numericAmount;
+        const transaction: Transaction = {
           id: razorpay_payment_id || `pay_demo_${Date.now()}`,
+          userId: user.id,
+          paymentId: razorpay_payment_id || `pay_demo_${Date.now()}`,
           type: 'DEPOSIT',
           amount: numericAmount,
           status: 'COMPLETED',
@@ -233,7 +266,7 @@ async function startServer() {
           id: `deposit_${Date.now()}`,
           type: 'ACCOUNT',
           title: 'Funds Added (Demo)',
-          message: `Successfully deposited $${numericAmount.toFixed(2)} to your account (Demo Mode).`,
+          message: `Successfully deposited ₹${numericAmount.toLocaleString()} to your account (Demo Mode).`,
           timestamp: new Date().toISOString()
         };
         wss.clients.forEach(client => {
@@ -242,7 +275,7 @@ async function startServer() {
           }
         });
 
-        return res.json({ status: "ok", balance: userBalance });
+        return res.json({ status: "ok", balance: user.balance });
       }
 
       const crypto = await import("crypto");
@@ -252,9 +285,11 @@ async function startServer() {
 
       if (generated_signature === razorpay_signature) {
         // Payment is verified
-        userBalance += numericAmount;
-        const transaction = {
+        user.balance += numericAmount;
+        const transaction: Transaction = {
           id: razorpay_payment_id,
+          userId: user.id,
+          paymentId: razorpay_payment_id,
           type: 'DEPOSIT',
           amount: numericAmount,
           status: 'COMPLETED',
@@ -267,7 +302,7 @@ async function startServer() {
           id: `deposit_${Date.now()}`,
           type: 'ACCOUNT',
           title: 'Funds Added',
-          message: `Successfully deposited $${numericAmount.toFixed(2)} to your account.`,
+          message: `Successfully deposited ₹${numericAmount.toLocaleString()} to your account.`,
           timestamp: new Date().toISOString()
         };
         wss.clients.forEach(client => {
@@ -276,7 +311,7 @@ async function startServer() {
           }
         });
 
-        res.json({ status: "ok", balance: userBalance });
+        res.json({ status: "ok", balance: user.balance });
       } else {
         res.status(400).json({ status: "error", message: "Invalid signature" });
       }
@@ -288,18 +323,25 @@ async function startServer() {
 
   app.post("/api/user/withdraw", async (req, res) => {
     try {
-      const { amount, bankDetails } = req.body;
-      if (amount > userBalance) {
+      const { amount, bankDetails, userId } = req.body;
+      const user = users.find(u => u.id === userId || u.phone === userId || u.email === userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      if (amount > user.balance) {
         return res.status(400).json({ error: "Insufficient balance" });
       }
 
-      userBalance -= amount;
-      const transaction = {
+      user.balance -= amount;
+      const transaction: Transaction = {
         id: `withdraw_${Date.now()}`,
+        userId: user.id,
+        paymentId: `withdraw_${Date.now()}`,
         type: 'WITHDRAW',
         amount,
         status: 'PROCESSING',
-        bankDetails,
         timestamp: new Date().toISOString()
       };
       transactions.push(transaction);
@@ -309,7 +351,7 @@ async function startServer() {
         id: `withdraw_notif_${Date.now()}`,
         type: 'ACCOUNT',
         title: 'Withdrawal Initiated',
-        message: `Your withdrawal of $${amount.toFixed(2)} is being processed.`,
+        message: `Your withdrawal of ₹${amount.toLocaleString()} is being processed.`,
         timestamp: new Date().toISOString()
       };
       wss.clients.forEach(client => {
@@ -318,7 +360,7 @@ async function startServer() {
         }
       });
 
-      res.json({ status: "ok", balance: userBalance });
+      res.json({ status: "ok", balance: user.balance });
     } catch (error: any) {
       res.status(500).json({ error: error.message });
     }
@@ -357,7 +399,13 @@ async function startServer() {
 
   // Trade History Route
   app.get("/api/user/trade-history", (req, res) => {
-    res.json(MOCK_TRADE_HISTORY);
+    const userId = req.query.userId as string;
+    const user = users.find(u => u.id === userId || u.phone === userId || u.email === userId);
+    if (user) {
+      res.json(user.trades);
+    } else {
+      res.json([]);
+    }
   });
 
   app.post("/api/admin/users/block", (req, res) => {
@@ -433,7 +481,7 @@ async function startServer() {
   });
 
   app.post("/api/auth/register", (req, res) => {
-    const { fullName, email, phone } = req.body;
+    const { fullName, email, phone, role } = req.body;
     
     // Check if blocked
     const existingBlocked = users.find(u => (u.email === email || u.phone === phone) && u.status === 'blocked');
@@ -444,18 +492,24 @@ async function startServer() {
     // Check if already exists
     const existing = users.find(u => u.email === email || u.phone === phone);
     if (existing) {
+      // Update role if provided and different
+      if (role && existing.role !== role) {
+        existing.role = role as 'user' | 'admin';
+      }
       return res.json({ status: 'ok', user: existing }); // Simulate existing user login
     }
 
     const newUser: User = {
-      id: `user_${Date.now()}`,
-      fullName: fullName || 'New User',
+      id: role === 'admin' ? `admin_${Date.now()}` : `user_${Date.now()}`,
+      fullName: fullName || (role === 'admin' ? 'New Admin' : 'New User'),
       email,
       phone,
       registrationDate: new Date().toISOString(),
       status: 'active',
-      role: 'user',
-      kycStatus: 'NOT_SUBMITTED'
+      role: (role as 'user' | 'admin') || 'user',
+      kycStatus: role === 'admin' ? 'VERIFIED' : 'NOT_SUBMITTED',
+      balance: 0,
+      trades: []
     };
     users.push(newUser);
     res.json({ status: "ok", user: newUser });

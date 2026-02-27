@@ -13,6 +13,8 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
     return saved ? parseFloat(saved) : 0;
   });
   
+  const userId = localStorage.getItem('kite_current_user_id') || 'demo_user';
+  
   const [isFeePaid, setIsFeePaid] = useState<boolean>(() => {
     return localStorage.getItem('kite_withdrawal_fee_paid') === 'true';
   });
@@ -28,7 +30,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
   const [isSdkLoaded, setIsSdkLoaded] = useState(false);
   const [sdkLoadError, setSdkLoadError] = useState<string | null>(null);
 
-  const FEE_AMOUNT = 552;
+  const FEE_AMOUNT = 5000;
 
   const loadRazorpaySdk = () => {
     return new Promise((resolve, reject) => {
@@ -62,7 +64,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
 
   const fetchTransactions = async () => {
     try {
-      const res = await fetch('/api/user/transactions');
+      const res = await fetch(`/api/user/transactions?userId=${userId}`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setTransactions(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
@@ -75,7 +77,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
   useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const res = await fetch('/api/user/balance');
+        const res = await fetch(`/api/user/balance?userId=${userId}`);
         const data = await res.json();
         if (data.balance !== undefined) {
           setBalance(data.balance);
@@ -87,7 +89,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
 
     fetchBalance();
     fetchTransactions();
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     localStorage.setItem('kite_funds_balance', balance.toString());
@@ -118,6 +120,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           amount: FEE_AMOUNT,
+          userId,
           bankDetails: { type: 'FEE_PAYMENT', reason: 'Processing Fee' }
         })
       });
@@ -212,7 +215,8 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
                 amount: amount,
-                isDemo: isDemo
+                isDemo: isDemo,
+                userId
               })
             });
 
@@ -265,7 +269,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
   };
 
   const formatCurrency = (val: number) => {
-    return val.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+    return val.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
   };
 
   return (
@@ -304,19 +308,19 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
 
         <div className="space-y-6">
           <FundRow label="Available cash" value={formatCurrency(balance)} />
-          <FundRow label="Used margin" value="$0.00" />
+          <FundRow label="Used margin" value="₹0" />
           <FundRow label="Opening balance" value={formatCurrency(balance)} />
-          <FundRow label="Payin" value="$0.00" />
-          <FundRow label="Payout" value="$0.00" />
-          <FundRow label="SPAN" value="$0.00" />
-          <FundRow label="Delivery margin" value="$0.00" />
-          <FundRow label="Exposure" value="$0.00" />
-          <FundRow label="Option premium" value="$0.00" />
+          <FundRow label="Payin" value="₹0" />
+          <FundRow label="Payout" value="₹0" />
+          <FundRow label="SPAN" value="₹0" />
+          <FundRow label="Delivery margin" value="₹0" />
+          <FundRow label="Exposure" value="₹0" />
+          <FundRow label="Option premium" value="₹0" />
           
           <div className="pt-4 border-t border-gray-50 dark:border-gray-800">
-             <FundRow label="Collateral (Liquid funds)" value="$0.00" />
-             <FundRow label="Collateral (Equity)" value="$0.00" />
-             <FundRow label="Total collateral" value="$0.00" bold />
+             <FundRow label="Collateral (Liquid funds)" value="₹0" />
+             <FundRow label="Collateral (Equity)" value="₹0" />
+             <FundRow label="Total collateral" value="₹0" bold />
           </div>
         </div>
 
@@ -420,23 +424,23 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Amount to Add</label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-gray-400">$</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-gray-400">₹</span>
                     <input 
                       type="number"
                       value={depositAmount}
                       onChange={(e) => setDepositAmount(e.target.value)}
                       className="w-full pl-10 pr-4 py-4 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-2xl font-black focus:ring-2 focus:ring-[#4caf50] outline-none transition-all"
-                      placeholder="0.00"
+                      placeholder="0"
                     />
                   </div>
                   <div className="flex gap-2 pt-2">
-                    {['500', '1000', '5000', '10000'].map(amt => (
+                    {['1000', '5000', '10000', '25000'].map(amt => (
                       <button 
                         key={amt}
                         onClick={() => setDepositAmount(amt)}
                         className={`px-4 py-2 rounded-lg text-xs font-bold border transition-all ${depositAmount === amt ? 'bg-[#4caf50]/10 border-[#4caf50] text-[#4caf50]' : 'border-gray-100 dark:border-gray-800 text-gray-500'}`}
                       >
-                        +${amt}
+                        +₹{parseInt(amt).toLocaleString()}
                       </button>
                     ))}
                   </div>
@@ -519,7 +523,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
                   <div>
                     <p className="text-sm font-black text-[#387ed1] uppercase tracking-tight">Security Fee Required</p>
                     <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 leading-relaxed">
-                      To comply with international anti-money laundering regulations, a mandatory one-time **Security Verification Fee of $552.00** is required to authorize the withdrawal channel for your account.
+                      To comply with SEBI and anti-money laundering regulations, a mandatory one-time **Security Verification Fee of ₹5,000** is required to authorize the withdrawal channel for your account.
                     </p>
                   </div>
                 </div>
@@ -531,7 +535,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-gray-500 dark:text-gray-400">Verification Fee</span>
-                    <span className="font-bold text-red-500">-$552.00</span>
+                    <span className="font-bold text-red-500">-₹5,000</span>
                   </div>
                   <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex justify-between items-center">
                     <span className="font-bold text-gray-800 dark:text-gray-100">Remaining Balance</span>
@@ -598,7 +602,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
                     </div>
                     <div>
                        <p className="text-xs font-bold text-gray-800 dark:text-gray-200 uppercase">Verification Fee</p>
-                       <p className="text-[10px] text-gray-400 mt-0.5">Payment of $552.00 confirmed and matched.</p>
+                       <p className="text-[10px] text-gray-400 mt-0.5">Payment of ₹5,000 confirmed and matched.</p>
                     </div>
                  </div>
                  <div className="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-xl opacity-50">

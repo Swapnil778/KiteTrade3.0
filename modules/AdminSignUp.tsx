@@ -99,9 +99,27 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
     }, 1200);
   };
 
-  const handleFinalSubmit = () => {
+  const handleFinalSubmit = async () => {
     setIsSubmitting(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          fullName: `Admin ${adminId}`, 
+          email: `${adminId.replace('.', '_')}@kitetrade.admin`, 
+          phone: adminId,
+          role: 'admin'
+        })
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || "Registration failed");
+        setIsSubmitting(false);
+        return;
+      }
+
       const storageKey = 'kite_registered_admins';
       const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
       if (!existing.includes(adminId)) {
@@ -113,7 +131,11 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
       setIsVerified(true);
       setIsSubmitting(false);
       setTimeout(() => onSignUpSuccess(adminId), 1500);
-    }, 2000);
+    } catch (err) {
+      console.error("Admin registration error:", err);
+      setIsSubmitting(false);
+      setError("An error occurred during registration. Please try again.");
+    }
   };
 
   return (

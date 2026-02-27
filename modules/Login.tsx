@@ -54,32 +54,37 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
           body: JSON.stringify({ identifier: inputId })
         });
         const data = await res.json();
-        
-        if (data.status === 'blocked') {
-          setError(`Your account has been blocked. Reason: ${data.blockReason || 'Violation of terms'}. Please contact support.`);
-          setIsShaking(true);
-          setTimeout(() => setIsShaking(false), 400);
-          return false;
-        }
-        return true;
+        return data;
       } catch (err) {
         console.error("Status check failed:", err);
-        return true; // Fallback to local logic if server fails
+        return { status: 'error' };
       }
     };
 
     const proceedWithLogin = async () => {
-      const isAllowed = await checkStatus();
-      if (!isAllowed) return;
+      const data = await checkStatus();
+      
+      if (data.status === 'blocked') {
+        setError(`Your account has been blocked. Reason: ${data.blockReason || 'Violation of terms'}. Please contact support.`);
+        setIsShaking(true);
+        setTimeout(() => setIsShaking(false), 400);
+        return;
+      }
 
       const isDemo = inputId.toLowerCase() === 'demo';
-      const storageKey = isAdmin ? 'kite_registered_admins' : 'kite_registered_users';
-      const registeredUsers = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      const isRegistered = registeredUsers.includes(inputId);
-
-      if (isDemo || isRegistered) {
+      const isRegisteredOnServer = data.status === 'active';
+      
+      if (isDemo || isRegisteredOnServer) {
         localStorage.setItem('kite_has_onboarded', 'true');
         
+        // Update local storage to remember this user
+        const storageKey = isAdmin ? 'kite_registered_admins' : 'kite_registered_users';
+        const registeredUsers = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        if (!registeredUsers.includes(inputId)) {
+          registeredUsers.push(inputId);
+          localStorage.setItem(storageKey, JSON.stringify(registeredUsers));
+        }
+
         if (rememberMe) {
           localStorage.setItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid', inputId);
           localStorage.setItem('kite_is_logged_in', 'true');

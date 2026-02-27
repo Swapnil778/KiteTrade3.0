@@ -203,6 +203,7 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
           <thead className="bg-[#1e2532]/50 text-[10px] uppercase font-black tracking-widest text-gray-500 border-b border-white/5">
             <tr>
               <th className="px-6 py-4">User Details</th>
+              <th className="px-6 py-4">Balance</th>
               <th className="px-6 py-4">KYC Status</th>
               <th className="px-6 py-4">Account Status</th>
               <th className="px-6 py-4 text-right">Actions</th>
@@ -221,6 +222,9 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
                       <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{u.email} {u.phone && `• ${u.phone}`}</p>
                     </div>
                   </div>
+                </td>
+                <td className="px-6 py-4">
+                  <p className="text-sm font-black text-white tabular-nums">₹{u.balance?.toLocaleString() || 0}</p>
                 </td>
                 <td className="px-6 py-4">
                   <button 
@@ -544,10 +548,10 @@ const UserPaymentManagement = ({ userId, onBack, role, addLog }: { userId: strin
 const FinancialManagement = ({ stats }: { stats: AdminStats }) => (
   <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-       <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center relative overflow-hidden group">
+        <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center relative overflow-hidden group">
           <div className="absolute top-0 left-0 w-full h-1 bg-blue-500 opacity-50" />
           <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Net Balance</p>
-          <p className="text-4xl font-black text-white">${(stats.totalDeposits - stats.totalWithdrawals).toLocaleString()}</p>
+          <p className="text-4xl font-black text-white">₹{(stats.totalDeposits - stats.totalWithdrawals).toLocaleString()}</p>
           <div className="mt-4 flex items-center justify-center gap-2 text-emerald-500 text-[10px] font-black uppercase tracking-widest">
             <TrendingUp size={12} /> System Healthy
           </div>
@@ -555,13 +559,13 @@ const FinancialManagement = ({ stats }: { stats: AdminStats }) => (
        <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-emerald-500 opacity-50" />
           <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Total Inflow</p>
-          <p className="text-4xl font-black text-emerald-400">${stats.totalDeposits.toLocaleString()}</p>
+          <p className="text-4xl font-black text-emerald-400">₹{stats.totalDeposits.toLocaleString()}</p>
           <p className="text-[10px] text-gray-600 font-bold mt-2 uppercase tracking-widest">Cumulative Deposits</p>
        </div>
        <div className="bg-[#12161f] p-8 rounded-2xl border border-white/5 shadow-xl text-center relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-red-500 opacity-50" />
           <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-2">Total Outflow</p>
-          <p className="text-4xl font-black text-red-400">${stats.totalWithdrawals.toLocaleString()}</p>
+          <p className="text-4xl font-black text-red-400">₹{stats.totalWithdrawals.toLocaleString()}</p>
           <p className="text-[10px] text-gray-600 font-bold mt-2 uppercase tracking-widest">Processed Payouts</p>
        </div>
     </div>
@@ -574,11 +578,11 @@ const FinancialManagement = ({ stats }: { stats: AdminStats }) => (
        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="p-6 bg-white/5 rounded-2xl border border-white/5">
              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Platform Revenue (2% Fee)</p>
-             <p className="text-3xl font-black text-white">${stats.revenue.toLocaleString()}</p>
+             <p className="text-3xl font-black text-white">₹{stats.revenue.toLocaleString()}</p>
           </div>
           <div className="p-6 bg-white/5 rounded-2xl border border-white/5">
              <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2">Trading Volume</p>
-             <p className="text-3xl font-black text-blue-400">${stats.tradingVolume.toLocaleString()}</p>
+             <p className="text-3xl font-black text-blue-400">₹{stats.tradingVolume.toLocaleString()}</p>
           </div>
        </div>
     </div>

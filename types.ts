@@ -57,6 +57,8 @@ export interface User {
     backUrl?: string;
     submittedAt: string;
   }[];
+  balance: number;
+  trades: Order[];
 }
 
 export interface Order {

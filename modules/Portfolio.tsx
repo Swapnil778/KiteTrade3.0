@@ -33,10 +33,12 @@ const Portfolio: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'holdings' | 'positions' | 'history'>('holdings');
   const [holdings, setHoldings] = useState<Holding[]>(MOCK_HOLDINGS);
   const [tradeHistory, setTradeHistory] = useState<Order[]>([]);
+  const userId = localStorage.getItem('kite_current_user_id') || 'demo_user';
+
   useEffect(() => {
     const fetchTradeHistory = async () => {
       try {
-        const res = await fetch('/api/user/trade-history');
+        const res = await fetch(`/api/user/trade-history?userId=${userId}`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setTradeHistory(data);
@@ -46,7 +48,7 @@ const Portfolio: React.FC = () => {
       }
     };
     fetchTradeHistory();
-  }, []);
+  }, [userId]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -357,7 +359,7 @@ const Portfolio: React.FC = () => {
                         {trade.quantity.toLocaleString()} @ {trade.price.toFixed(4)}
                       </p>
                       <p className="text-xs font-black text-gray-400 mt-1 tabular-nums">
-                        ${(trade.quantity * trade.price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ₹{(trade.quantity * trade.price).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </p>
                     </div>
                   </div>
@@ -377,18 +379,18 @@ const Portfolio: React.FC = () => {
           <div className="grid grid-cols-2 gap-y-6">
             <div>
               <p className="text-[11px] text-gray-400 uppercase font-black tracking-widest mb-1.5">Invested</p>
-              <p className="text-xl font-black text-gray-900 dark:text-gray-100 tabular-nums tracking-tighter">${totalInvested.toLocaleString('en-US')}</p>
+              <p className="text-xl font-black text-gray-900 dark:text-gray-100 tabular-nums tracking-tighter">₹{totalInvested.toLocaleString('en-IN')}</p>
             </div>
             <div className="text-right">
               <p className="text-[11px] text-gray-400 uppercase font-black tracking-widest mb-1.5">Current</p>
-              <p className="text-xl font-black text-gray-900 dark:text-gray-100 tabular-nums tracking-tighter">${currentValue.toLocaleString('en-US')}</p>
+              <p className="text-xl font-black text-gray-900 dark:text-gray-100 tabular-nums tracking-tighter">₹{currentValue.toLocaleString('en-IN')}</p>
             </div>
             <div className="col-span-2 pt-6 border-t border-gray-50 dark:border-gray-900/50">
               <div className="flex justify-between items-center">
                 <p className="text-xs font-black text-gray-400 uppercase tracking-widest">Total P&L</p>
                 <div className="text-right">
                   <p className={`text-2xl font-black tracking-tighter tabular-nums ${totalPnL >= 0 ? 'text-kiteGreen' : 'text-kiteRed'}`}>
-                    {totalPnL >= 0 ? '+' : ''}{totalPnL.toLocaleString('en-US')}
+                    {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toLocaleString('en-IN')}
                   </p>
                   <p className={`text-xs font-black mt-1 ${totalPnL >= 0 ? 'text-kiteGreen' : 'text-kiteRed'}`}>
                     {totalPnL >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
@@ -422,7 +424,7 @@ const Portfolio: React.FC = () => {
                       const val = payload[0].value as number;
                       return (
                         <div className="bg-gray-900 text-white px-3 py-1.5 rounded-xl text-[11px] font-black shadow-2xl border border-white/10">
-                          {val >= 0 ? '+' : ''}${val.toLocaleString()}
+                          {val >= 0 ? '+' : ''}₹{val.toLocaleString()}
                         </div>
                       );
                     }
@@ -532,7 +534,7 @@ const Portfolio: React.FC = () => {
           <div>
             <p className="text-[11px] text-gray-400 font-black uppercase tracking-widest mb-1">Total P&L</p>
             <p className={`text-xl font-black tracking-tighter tabular-nums ${totalPnL >= 0 ? 'text-kiteGreen' : 'text-kiteRed'}`}>
-              {totalPnL >= 0 ? '+' : ''}${totalPnL.toLocaleString('en-US')}
+              {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toLocaleString('en-IN')}
             </p>
           </div>
           <button 
@@ -554,7 +556,7 @@ const Portfolio: React.FC = () => {
                   <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
                     {tradeType === 'BUY' ? 'Buy' : 'Sell'} {selectedHolding.symbol}
                   </h2>
-                  <p className="text-sm text-gray-400 mt-1">LTP: ${selectedHolding.ltp.toFixed(4)}</p>
+                  <p className="text-sm text-gray-400 mt-1">LTP: ₹{selectedHolding.ltp.toFixed(4)}</p>
                 </div>
                 <button onClick={() => { setSelectedHolding(null); setTradeType(null); }} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
                   <X size={20} className="text-gray-500" />
@@ -564,14 +566,17 @@ const Portfolio: React.FC = () => {
               <div className="space-y-6">
                 <div>
                   <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-2 block">Quantity</label>
-                  <input 
-                    type="number" 
-                    value={tradeQuantity}
-                    onChange={(e) => setTradeQuantity(e.target.value)}
-                    placeholder="Enter quantity"
-                    className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-xl py-4 px-5 text-lg font-bold focus:ring-2 focus:ring-[#387ed1] transition-all"
-                    autoFocus
-                  />
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-gray-400">₹</span>
+                    <input 
+                      type="number" 
+                      value={tradeQuantity}
+                      onChange={(e) => setTradeQuantity(e.target.value)}
+                      placeholder="Enter quantity"
+                      className="w-full bg-gray-50 dark:bg-gray-900 border-none rounded-xl py-4 pl-10 pr-5 text-lg font-bold focus:ring-2 focus:ring-[#387ed1] transition-all"
+                      autoFocus
+                    />
+                  </div>
                   {tradeType === 'SELL' && (
                     <p className="text-[10px] text-gray-400 mt-2 font-medium">Available: {selectedHolding.quantity}</p>
                   )}
@@ -592,7 +597,7 @@ const Portfolio: React.FC = () => {
                   />
                   {tradeStopLoss && parseFloat(tradeStopLoss) >= selectedHolding.ltp ? (
                     <p className="text-[10px] text-red-500 mt-2 font-bold uppercase tracking-tighter flex items-center gap-1">
-                      <AlertCircle size={10} /> Must be lower than LTP (${selectedHolding.ltp.toFixed(4)})
+                      <AlertCircle size={10} /> Must be lower than LTP (₹{selectedHolding.ltp.toFixed(4)})
                     </p>
                   ) : (
                     <p className="text-[10px] text-gray-400 mt-2 font-medium">Triggers alert if price falls below this value.</p>
@@ -602,7 +607,7 @@ const Portfolio: React.FC = () => {
                 <div className="bg-gray-50 dark:bg-gray-900 p-4 rounded-xl flex justify-between items-center">
                   <span className="text-sm text-gray-500 font-medium">Estimated Value</span>
                   <span className="text-lg font-bold text-gray-800 dark:text-white">
-                    ${((parseFloat(tradeQuantity) || 0) * selectedHolding.ltp).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₹{((parseFloat(tradeQuantity) || 0) * selectedHolding.ltp).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
 
@@ -635,7 +640,7 @@ const Portfolio: React.FC = () => {
                   <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
                     Set Stop-Loss
                   </h2>
-                  <p className="text-sm text-gray-400 mt-1">{isSettingSL.symbol} • LTP: ${isSettingSL.ltp.toFixed(4)}</p>
+                  <p className="text-sm text-gray-400 mt-1">{isSettingSL.symbol} • LTP: ₹{isSettingSL.ltp.toFixed(4)}</p>
                 </div>
                 <button onClick={() => setIsSettingSL(null)} className="p-2 bg-gray-100 dark:bg-gray-800 rounded-full">
                   <X size={20} className="text-gray-500" />
@@ -659,7 +664,7 @@ const Portfolio: React.FC = () => {
                   />
                   {tempSL && parseFloat(tempSL) >= isSettingSL.ltp ? (
                     <p className="text-[10px] text-red-500 mt-2 font-bold uppercase tracking-tighter flex items-center gap-1">
-                      <AlertCircle size={10} /> Must be lower than LTP (${isSettingSL.ltp.toFixed(4)})
+                      <AlertCircle size={10} /> Must be lower than LTP (₹{isSettingSL.ltp.toFixed(4)})
                     </p>
                   ) : (
                     <p className="text-[10px] text-gray-400 mt-2 font-medium">Automatic sell will trigger if price falls to or below this value.</p>
