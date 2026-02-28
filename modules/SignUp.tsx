@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ArrowRight, Loader2, CheckCircle2, MessageSquare, ShieldCheck } from 'lucide-react';
+import { useNotifications } from '../components/NotificationProvider';
 
 interface SignUpProps {
   onBack: () => void;
@@ -9,6 +10,7 @@ interface SignUpProps {
 }
 
 const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp }) => {
+  const { addNotification } = useNotifications();
   const [step, setStep] = useState<'details' | 'otp'>('details');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -103,7 +105,11 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
           
           if (!res.ok) {
             const data = await res.json();
-            alert(data.error || "Registration failed");
+            addNotification({
+              type: 'SYSTEM',
+              title: 'Registration Failed',
+              message: data.error || "Registration failed"
+            });
             setIsSubmitting(false);
             return;
           }
@@ -128,7 +134,11 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
       } catch (err) {
         console.error("Registration error:", err);
         setIsSubmitting(false);
-        alert("An error occurred during registration. Please try again.");
+        addNotification({
+          type: 'SYSTEM',
+          title: 'Error',
+          message: "An error occurred during registration. Please try again."
+        });
       }
     };
 

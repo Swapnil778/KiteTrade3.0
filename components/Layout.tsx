@@ -26,7 +26,7 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hideNav = false }) => {
-  const userId = localStorage.getItem('kite_saved_userid') || 'IH6978';
+  const userId = localStorage.getItem('kite_current_user_id') || localStorage.getItem('kite_saved_userid') || 'User';
   const { unreadCount, markAllAsRead, clearNotifications, notifications } = useNotifications();
 
   const isAccountActive = [AppScreen.ACCOUNT, AppScreen.PROFILE, AppScreen.SETTINGS, AppScreen.FUNDS, AppScreen.NOTIFICATIONS].includes(activeScreen);
@@ -114,7 +114,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
 
       {/* Main Container */}
       <div className="flex-1 flex flex-col h-full relative overflow-hidden">
-        <div className="flex flex-col h-full w-full max-w-md md:max-w-none mx-auto bg-white dark:bg-black overflow-hidden relative transition-colors duration-200 md:shadow-none shadow-2xl border-x md:border-x-0 border-gray-100 dark:border-gray-900">
+        <div className="flex flex-col h-full w-full max-w-2xl md:max-w-none mx-auto bg-white dark:bg-black overflow-hidden relative transition-colors duration-200 md:shadow-none shadow-2xl border-x md:border-x-0 border-gray-100 dark:border-gray-900">
           
           {/* Header */}
           {!hideNav && (
@@ -184,7 +184,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeScreen, onNavigate, hid
 
           {/* Bottom Navigation (Mobile Only) */}
           {!hideNav && (
-            <nav className="md:hidden fixed bottom-0 w-full max-w-md glass border-t border-gray-100/50 dark:border-gray-900/50 flex items-center justify-between px-2 z-50 transition-colors pb-safe">
+            <nav className="md:hidden fixed bottom-0 w-full max-w-2xl glass border-t border-gray-100/50 dark:border-gray-900/50 flex items-center justify-between px-2 z-50 transition-colors pb-safe">
               <NavItem 
                 icon={<BarChart2 size={22} />} 
                 label="Watchlist" 

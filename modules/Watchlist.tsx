@@ -17,6 +17,7 @@ import {
 import { MOCK_WATCHLIST } from '../constants';
 import { Stock } from '../types';
 import { GoogleGenAI } from "@google/genai";
+import { useNotifications } from '../components/NotificationProvider';
 
 interface WatchlistProps {
   onOrderPlaced: () => void;
@@ -60,6 +61,7 @@ const PriceDisplay = ({ price, symbol, isUp }: { price: number, symbol: string, 
 };
 
 const Watchlist: React.FC<WatchlistProps> = ({ onOrderPlaced }) => {
+  const { addNotification } = useNotifications();
   const [stocks, setStocks] = useState<Stock[]>(MOCK_WATCHLIST);
   const [activeTab, setActiveTab] = useState(1);
   const [selectedStock, setSelectedStock] = useState<Stock | null>(null);
@@ -87,8 +89,19 @@ const Watchlist: React.FC<WatchlistProps> = ({ onOrderPlaced }) => {
         config: { responseMimeType: "application/json" }
       });
       
-      const newsData = JSON.parse(response.text || "[]");
-      setNews(newsData);
+      let newsData = [];
+      try {
+        newsData = JSON.parse(response.text || "[]");
+      } catch (e) {
+        console.error("Failed to parse news JSON:", e);
+        throw new Error("Invalid news format");
+      }
+
+      if (Array.isArray(newsData)) {
+        setNews(newsData);
+      } else {
+        throw new Error("News data is not an array");
+      }
     } catch (err) {
       console.error("Failed to fetch news:", err);
       // Fallback mock news if AI fails
@@ -257,6 +270,58 @@ const Watchlist: React.FC<WatchlistProps> = ({ onOrderPlaced }) => {
   }, [currentHistory]);
 
   const chartData = currentHistory;
+
+  const [quantity, setQuantity] = useState<string>('1');
+
+  const handleTrade = async (type: 'BUY' | 'SELL') => {
+    if (!currentSelectedStock) return;
+    const qty = parseInt(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Invalid Quantity',
+        message: "Please enter a valid quantity."
+      });
+      return;
+    }
+
+    const userId = localStorage.getItem('kite_current_user_id') || localStorage.getItem('kite_saved_userid');
+    if (!userId) {
+      addNotification({
+        type: 'ACCOUNT',
+        title: 'Session Expired',
+        message: "User session not found. Please log in again."
+      });
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/user/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          symbol: currentSelectedStock.symbol,
+          type,
+          price: currentSelectedStock.ltp,
+          quantity: qty
+        })
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Trade failed");
+      }
+
+      onOrderPlaced();
+    } catch (err: any) {
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Trade Error',
+        message: err.message
+      });
+    }
+  };
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
@@ -495,15 +560,39 @@ const Watchlist: React.FC<WatchlistProps> = ({ onOrderPlaced }) => {
                 )}
               </div>
 
+              <div className="pt-6">
+                <label className="text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-widest mb-2 block">Quantity</label>
+                <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setQuantity(prev => Math.max(1, parseInt(prev) - 1).toString())}
+                    className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:text-brand-500 transition-colors"
+                  >
+                    -
+                  </button>
+                  <input 
+                    type="number" 
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    className="flex-1 h-12 bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl text-center font-bold text-gray-800 dark:text-white outline-none focus:border-brand-500"
+                  />
+                  <button 
+                    onClick={() => setQuantity(prev => (parseInt(prev) + 1).toString())}
+                    className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-500 hover:text-brand-500 transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
               <div className="flex gap-4 pt-4">
                 <button 
-                  onClick={() => onOrderPlaced()}
+                  onClick={() => handleTrade('BUY')}
                   className="flex-1 bg-brand-500 text-white py-4.5 rounded-2xl font-black text-lg active:scale-[0.98] transition-all shadow-xl shadow-brand-500/25 uppercase tracking-widest"
                 >
                   BUY
                 </button>
                 <button 
-                  onClick={() => onOrderPlaced()}
+                  onClick={() => handleTrade('SELL')}
                   className="flex-1 bg-kiteRed text-white py-4.5 rounded-2xl font-black text-lg active:scale-[0.98] transition-all shadow-xl shadow-red-500/25 uppercase tracking-widest"
                 >
                   SELL

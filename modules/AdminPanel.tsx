@@ -707,7 +707,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, onExitAdmin }) => {
   
   const [marketConfig, setMarketConfig] = useState(() => {
     const saved = localStorage.getItem('kite_market_config');
-    return saved ? JSON.parse(saved) : {
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Failed to parse market config:", e);
+      }
+    }
+    return {
       price: 0,
       volatility: 0,
       winRatio: 0,

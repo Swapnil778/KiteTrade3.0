@@ -173,7 +173,7 @@ const AppContent: React.FC = () => {
 
     return (
       <div className="h-screen bg-gray-50 dark:bg-[#050505] flex items-center justify-center p-0 md:p-4">
-        <div className="w-full h-full md:h-[850px] md:max-w-[420px] md:rounded-[40px] md:shadow-2xl md:border-8 md:border-gray-200 dark:md:border-gray-800 overflow-hidden relative">
+        <div className="w-full h-full md:h-[850px] md:max-w-[500px] md:rounded-[40px] md:shadow-2xl md:border-8 md:border-gray-200 dark:md:border-gray-800 overflow-hidden relative">
           {authComponent}
         </div>
       </div>

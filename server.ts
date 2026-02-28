@@ -398,6 +398,47 @@ async function startServer() {
     }
   });
 
+  app.post("/api/user/trade", (req, res) => {
+    const { userId, symbol, type, price, quantity, status = 'COMPLETED' } = req.body;
+    const user = users.find(u => u.id === userId || u.phone === userId || u.email === userId);
+    
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const totalCost = price * quantity;
+    
+    if (type === 'BUY') {
+      if (user.balance < totalCost) {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
+      user.balance -= totalCost;
+    } else if (type === 'SELL') {
+      user.balance += totalCost;
+    }
+
+    const newTrade: Order = {
+      id: `trd_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      symbol,
+      type,
+      price,
+      quantity,
+      status,
+      time: new Date().toLocaleString('en-US', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })
+    };
+
+    user.trades = [newTrade, ...(user.trades || [])];
+    saveData({ users, transactions });
+    
+    res.json({ status: "ok", balance: user.balance, trade: newTrade });
+  });
+
   // User Management Admin Routes
   app.get("/api/admin/users", (req, res) => {
     res.json(users);

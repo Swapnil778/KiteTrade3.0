@@ -2,12 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, HelpCircle, X, AlertCircle, CheckCircle2, Loader2, CreditCard, Landmark, Smartphone, ArrowRight, Lock, ShieldAlert, ShieldCheck, Zap, History, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { Transaction } from '../types';
+import { useNotifications } from '../components/NotificationProvider';
 
 interface FundsProps {
   onBack: () => void;
 }
 
 const Funds: React.FC<FundsProps> = ({ onBack }) => {
+  const { addNotification } = useNotifications();
   const [balance, setBalance] = useState<number>(() => {
     const saved = localStorage.getItem('kite_funds_balance');
     return saved ? parseFloat(saved) : 0;
@@ -109,7 +111,11 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
 
   const handlePayProcessingFee = async () => {
     if (balance < FEE_AMOUNT) {
-      alert("Insufficient balance to pay the processing fee.");
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Insufficient Balance',
+        message: "Insufficient balance to pay the processing fee."
+      });
       return;
     }
 
@@ -139,11 +145,19 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
         }, 2000);
       } else {
         const data = await res.json();
-        alert(data.error || "Failed to process fee payment.");
+        addNotification({
+          type: 'SYSTEM',
+          title: 'Payment Failed',
+          message: data.error || "Failed to process fee payment."
+        });
       }
     } catch (err) {
       console.error("Fee payment error:", err);
-      alert("Network error. Please try again.");
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Network Error',
+        message: "Network error. Please try again."
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -235,7 +249,11 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
             }
           } catch (err: any) {
             console.error("Verification Error:", err);
-            alert("Payment verification failed: " + err.message);
+            addNotification({
+              type: 'SYSTEM',
+              title: 'Verification Failed',
+              message: "Payment verification failed: " + err.message
+            });
             setIsProcessing(false);
           }
         },
@@ -263,7 +281,11 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
 
     } catch (error: any) {
       console.error("Payment Error:", error);
-      alert(error.message || "Payment failed to initialize");
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Initialization Failed',
+        message: error.message || "Payment failed to initialize"
+      });
       setIsProcessing(false);
     }
   };

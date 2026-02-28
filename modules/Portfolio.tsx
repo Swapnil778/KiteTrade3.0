@@ -28,8 +28,10 @@ import {
 } from 'recharts';
 import { Holding, Stock, Order } from '../types';
 import { GoogleGenAI } from "@google/genai";
+import { useNotifications } from '../components/NotificationProvider';
 
 const Portfolio: React.FC = () => {
+  const { addNotification } = useNotifications();
   const [activeTab, setActiveTab] = useState<'holdings' | 'positions' | 'history'>('holdings');
   const [holdings, setHoldings] = useState<Holding[]>(MOCK_HOLDINGS);
   const [tradeHistory, setTradeHistory] = useState<Order[]>([]);
@@ -85,6 +87,20 @@ const Portfolio: React.FC = () => {
                   // Check Stop-Loss
                   if (holding.stopLoss && stock.ltp <= holding.stopLoss) {
                     triggers.push({ ...holding, ltp: stock.ltp });
+                    
+                    // Call API for auto-sell
+                    fetch('/api/user/trade', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        userId,
+                        symbol: holding.symbol,
+                        type: 'SELL',
+                        price: stock.ltp,
+                        quantity: holding.quantity,
+                        status: 'COMPLETED'
+                      })
+                    }).catch(err => console.error("Auto-sell API error:", err));
                   }
 
                   return {
@@ -120,9 +136,17 @@ const Portfolio: React.FC = () => {
                 
                 // Show a combined alert or notification if possible, but for now alert is fine
                 if (triggers.length === 1) {
-                  alert(`AUTO-SELL TRIGGERED: ${triggers[0].symbol} sold at ${triggers[0].ltp} (Stop-Loss: ${triggers[0].stopLoss})`);
+                  addNotification({
+                    type: 'TRADE',
+                    title: 'Auto-Sell Triggered',
+                    message: `${triggers[0].symbol} sold at ${triggers[0].ltp} (Stop-Loss: ${triggers[0].stopLoss})`
+                  });
                 } else {
-                  alert(`AUTO-SELL TRIGGERED for ${triggers.length} holdings due to stop-loss breach.`);
+                  addNotification({
+                    type: 'TRADE',
+                    title: 'Auto-Sell Triggered',
+                    message: `AUTO-SELL TRIGGERED for ${triggers.length} holdings due to stop-loss breach.`
+                  });
                 }
 
                 return updated.filter(h => !triggers.some(t => t.symbol === h.symbol));
@@ -170,7 +194,11 @@ const Portfolio: React.FC = () => {
     const sl = parseFloat(tempSL);
     
     if (!isNaN(sl) && sl > 0 && sl >= isSettingSL.ltp) {
-      alert("Stop-loss must be lower than the current market price (LTP).");
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Invalid Stop-Loss',
+        message: "Stop-loss must be lower than the current market price (LTP)."
+      });
       return;
     }
 
@@ -182,7 +210,7 @@ const Portfolio: React.FC = () => {
     setIsSettingSL(null);
   };
 
-  const handleConfirmTrade = () => {
+  const handleConfirmTrade = async () => {
     if (!selectedHolding || !tradeType || !tradeQuantity) return;
     const qty = parseInt(tradeQuantity);
     if (isNaN(qty) || qty <= 0) return;
@@ -190,35 +218,44 @@ const Portfolio: React.FC = () => {
 
     // Validation: Stop loss should be below LTP for long positions
     if (!isNaN(sl) && sl > 0 && sl >= selectedHolding.ltp) {
-      alert("Stop-loss must be lower than the current market price (LTP).");
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Invalid Stop-Loss',
+        message: "Stop-loss must be lower than the current market price (LTP)."
+      });
       return;
     }
 
-    setHoldings(prev => {
-      const existing = prev.find(h => h.symbol === selectedHolding.symbol);
-      
-      // Record trade in history
-      const newTrade: Order = {
-        id: `th-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-        symbol: selectedHolding.symbol,
-        type: tradeType,
-        status: 'COMPLETED',
-        price: selectedHolding.ltp,
-        quantity: qty,
-        time: new Date().toLocaleString('en-US', { 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric', 
-          hour: '2-digit', 
-          minute: '2-digit' 
+    try {
+      const res = await fetch('/api/user/trade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          symbol: selectedHolding.symbol,
+          type: tradeType,
+          price: selectedHolding.ltp,
+          quantity: qty
         })
-      };
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Trade failed");
+      }
+
+      const data = await res.json();
+      const newTrade = data.trade;
+
       setTradeHistory(prevHistory => [newTrade, ...prevHistory]);
 
+      setHoldings(prev => {
+      const existing = prev.find(h => h.symbol === selectedHolding.symbol);
+      
       if (existing) {
         if (tradeType === 'BUY') {
           const newQty = existing.quantity + qty;
-          const newInvested = existing.investedValue + (qty * existing.ltp);
+          const newInvested = existing.investedValue + (qty * selectedHolding.ltp);
           return prev.map(h => h.symbol === selectedHolding.symbol ? {
             ...h,
             quantity: newQty,
@@ -242,14 +279,40 @@ const Portfolio: React.FC = () => {
             stopLoss: !isNaN(sl) && sl > 0 ? sl : h.stopLoss
           } : h);
         }
+      } else if (tradeType === 'BUY') {
+        const newHolding: Holding = {
+          symbol: selectedHolding.symbol,
+          name: selectedHolding.name,
+          exchange: selectedHolding.exchange || 'FOREX',
+          quantity: qty,
+          avgPrice: selectedHolding.ltp,
+          ltp: selectedHolding.ltp,
+          change: 0,
+          percentChange: 0,
+          investedValue: qty * selectedHolding.ltp,
+          currentValue: qty * selectedHolding.ltp,
+          totalPnL: 0,
+          dayPnL: 0,
+          isUp: true,
+          stopLoss: !isNaN(sl) && sl > 0 ? sl : undefined
+        };
+        return [...prev, newHolding];
       }
       return prev;
     });
 
     setSelectedHolding(null);
     setTradeType(null);
+    setTradeQuantity('');
     setTradeStopLoss('');
-  };
+    } catch (err: any) {
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Trade Error',
+        message: err.message
+      });
+    }
+};
 
   const historicalPnL = useMemo(() => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
