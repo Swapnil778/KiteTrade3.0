@@ -101,7 +101,7 @@ const Portfolio: React.FC = () => {
               if (triggers.length > 0) {
                 triggers.forEach(h => {
                   const sellOrder: Order = {
-                    id: `sl-${Date.now()}-${h.symbol}`,
+                    id: `sl-${Date.now()}-${h.symbol}-${Math.random().toString(36).substr(2, 5)}`,
                     symbol: h.symbol,
                     type: 'SELL',
                     status: 'COMPLETED',
@@ -199,7 +199,7 @@ const Portfolio: React.FC = () => {
       
       // Record trade in history
       const newTrade: Order = {
-        id: `th-${Date.now()}`,
+        id: `th-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         symbol: selectedHolding.symbol,
         type: tradeType,
         status: 'COMPLETED',

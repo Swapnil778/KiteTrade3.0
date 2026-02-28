@@ -5,6 +5,32 @@ import { WebSocketServer, WebSocket } from "ws";
 import http from "http";
 import { User, Transaction, Order } from "./types";
 
+import fs from "fs";
+import path from "path";
+
+const DATA_FILE = path.join(process.cwd(), "data.json");
+
+function loadData() {
+  if (fs.existsSync(DATA_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+    } catch (e) {
+      console.error("Failed to load data:", e);
+    }
+  }
+  return null;
+}
+
+function saveData(data: any) {
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error("Failed to save data:", e);
+  }
+}
+
+const savedData = loadData();
+
 // Mock data for initial state
 const MOCK_WATCHLIST = [
   { symbol: 'EUR/USD', name: 'Euro / US Dollar', exchange: 'FOREX', ltp: 1.0845, change: 0.0012, percentChange: 0.11, isUp: true },
@@ -25,10 +51,10 @@ const MOCK_TRADE_HISTORY = [
 let currentStocks = [...MOCK_WATCHLIST];
 
 // In-memory user state (for demo purposes)
-const transactions: Transaction[] = [];
+const transactions: Transaction[] = savedData?.transactions || [];
 
 // User Management State
-let users: User[] = [
+let users: User[] = savedData?.users || [
   {
     id: 'demo_user',
     fullName: 'Demo User',
@@ -137,19 +163,22 @@ async function startServer() {
       };
     });
 
-    // Broadcast updates
-    const updateMessage = JSON.stringify({ type: "UPDATE", data: currentStocks });
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(updateMessage);
-        
-        // Send notifications if any
-        notifications.forEach(n => {
-          client.send(JSON.stringify({ type: "NOTIFICATION", data: n }));
+        // Broadcast updates
+        const updateMessage = JSON.stringify({ type: "UPDATE", data: currentStocks });
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(updateMessage);
+            
+            // Send notifications if any
+            notifications.forEach(n => {
+              client.send(JSON.stringify({ type: "NOTIFICATION", data: n }));
+            });
+          }
         });
-      }
-    });
-  }, 1000); // Update every second for "instantaneous" feel
+
+        // Periodically save data
+        saveData({ users, transactions });
+      }, 1000); // Update every second for "instantaneous" feel
 
   // API routes
   app.get("/api/health", (req, res) => {
@@ -251,15 +280,16 @@ async function startServer() {
         // In demo mode, we just accept it
         user.balance += numericAmount;
         const transaction: Transaction = {
-          id: razorpay_payment_id || `pay_demo_${Date.now()}`,
+          id: razorpay_payment_id || `pay_demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           userId: user.id,
-          paymentId: razorpay_payment_id || `pay_demo_${Date.now()}`,
+          paymentId: razorpay_payment_id || `pay_demo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           type: 'DEPOSIT',
           amount: numericAmount,
           status: 'COMPLETED',
           timestamp: new Date().toISOString()
         };
         transactions.push(transaction);
+        saveData({ users, transactions });
 
         // Broadcast notification
         const notification = {
@@ -296,6 +326,7 @@ async function startServer() {
           timestamp: new Date().toISOString()
         };
         transactions.push(transaction);
+        saveData({ users, transactions });
 
         // Broadcast notification
         const notification = {
@@ -336,15 +367,16 @@ async function startServer() {
 
       user.balance -= amount;
       const transaction: Transaction = {
-        id: `withdraw_${Date.now()}`,
+        id: `withdraw_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         userId: user.id,
-        paymentId: `withdraw_${Date.now()}`,
+        paymentId: `withdraw_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: 'WITHDRAW',
         amount,
         status: 'PROCESSING',
         timestamp: new Date().toISOString()
       };
       transactions.push(transaction);
+      saveData({ users, transactions });
 
       // Broadcast notification
       const notification = {
@@ -420,9 +452,7 @@ async function startServer() {
         blockReason: reason || 'Violation of terms'
       };
       
-      // Force logout by broadcasting a message if we had session tracking
-      // For now, we just update the status.
-      
+      saveData({ users, transactions });
       res.json({ status: "ok", user: users[userIndex] });
     } else {
       res.status(404).json({ error: "User not found" });
@@ -440,6 +470,7 @@ async function startServer() {
         blockedBy: undefined,
         blockReason: undefined
       };
+      saveData({ users, transactions });
       res.json({ status: "ok", user: users[userIndex] });
     } else {
       res.status(404).json({ error: "User not found" });
@@ -454,6 +485,7 @@ async function startServer() {
         ...users[userIndex],
         kycStatus: status
       };
+      saveData({ users, transactions });
       res.json({ status: "ok", user: users[userIndex] });
     } else {
       res.status(404).json({ error: "User not found" });
@@ -512,6 +544,7 @@ async function startServer() {
       trades: []
     };
     users.push(newUser);
+    saveData({ users, transactions });
     res.json({ status: "ok", user: newUser });
   });
 

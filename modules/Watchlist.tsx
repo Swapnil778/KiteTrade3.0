@@ -244,7 +244,7 @@ const Watchlist: React.FC<WatchlistProps> = ({ onOrderPlaced }) => {
                 <PriceDisplay price={stock.ltp} symbol={stock.symbol} isUp={stock.isUp} />
                 <div className="flex items-center gap-1.5 text-xs font-bold mt-1 tabular-nums">
                   <motion.span
-                    key={stock.change}
+                    key={`${stock.symbol}-change`}
                     initial={{ opacity: 0.5 }}
                     animate={{ opacity: 1 }}
                     className={stock.isUp ? 'text-kiteGreen' : 'text-kiteRed'}
@@ -252,7 +252,7 @@ const Watchlist: React.FC<WatchlistProps> = ({ onOrderPlaced }) => {
                     {stock.change > 0 ? '+' : ''}{stock.change.toFixed(stock.symbol.includes('JPY') ? 2 : 4)}
                   </motion.span>
                   <motion.span
-                    key={stock.percentChange}
+                    key={`${stock.symbol}-percent`}
                     initial={{ opacity: 0.5 }}
                     animate={{ opacity: 1 }}
                     className={`px-1.5 py-0.5 rounded text-[10px] ${stock.isUp ? 'bg-kiteGreen/10 text-kiteGreen' : 'bg-kiteRed/10 text-kiteRed'}`}
