@@ -20,7 +20,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
 
   useEffect(() => {
     const storageKey = isAdmin ? 'kite_registered_admins' : 'kite_registered_users';
-    const saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    let saved = [];
+    try {
+      const savedStr = localStorage.getItem(storageKey);
+      if (savedStr) {
+        saved = JSON.parse(savedStr);
+        if (!Array.isArray(saved)) saved = [];
+      }
+    } catch (e) {
+      saved = [];
+    }
     setRecentAccounts(saved);
 
     const onboarded = localStorage.getItem('kite_has_onboarded') === 'true';

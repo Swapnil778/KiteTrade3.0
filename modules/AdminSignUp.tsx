@@ -116,10 +116,20 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
       }
 
       const storageKey = 'kite_registered_admins';
-      const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
-      if (!existing.includes(adminId)) {
-        existing.push(adminId);
-        localStorage.setItem(storageKey, JSON.stringify(existing));
+      let registeredAdmins = [];
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          registeredAdmins = JSON.parse(saved);
+          if (!Array.isArray(registeredAdmins)) registeredAdmins = [];
+        }
+      } catch (e) {
+        registeredAdmins = [];
+      }
+
+      if (!registeredAdmins.includes(adminId)) {
+        registeredAdmins.push(adminId);
+        localStorage.setItem(storageKey, JSON.stringify(registeredAdmins));
       }
       
       localStorage.setItem('kite_has_onboarded', 'true');

@@ -85,7 +85,17 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onForgot, onSignUp, on
         
         // Update local storage to remember this admin
         const storageKey = 'kite_registered_admins';
-        const registeredAdmins = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        let registeredAdmins = [];
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            registeredAdmins = JSON.parse(saved);
+            if (!Array.isArray(registeredAdmins)) registeredAdmins = [];
+          }
+        } catch (e) {
+          registeredAdmins = [];
+        }
+
         if (!registeredAdmins.includes(adminId)) {
           registeredAdmins.push(adminId);
           localStorage.setItem(storageKey, JSON.stringify(registeredAdmins));

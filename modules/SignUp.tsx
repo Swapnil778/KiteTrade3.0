@@ -104,21 +104,37 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
           });
           
           if (!res.ok) {
-            const data = await res.json();
+            let errorMessage = "Registration failed";
+            try {
+              const data = await res.json();
+              errorMessage = data.error || errorMessage;
+            } catch (e) {
+              // Not JSON
+            }
             addNotification({
               type: 'SYSTEM',
               title: 'Registration Failed',
-              message: data.error || "Registration failed"
+              message: errorMessage
             });
             setIsSubmitting(false);
             return;
           }
 
           const storageKey = 'kite_registered_users';
-          const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
-          if (!existing.includes(phone)) {
-            existing.push(phone);
-            localStorage.setItem(storageKey, JSON.stringify(existing));
+          let registeredUsers = [];
+          try {
+            const saved = localStorage.getItem(storageKey);
+            if (saved) {
+              registeredUsers = JSON.parse(saved);
+              if (!Array.isArray(registeredUsers)) registeredUsers = [];
+            }
+          } catch (e) {
+            registeredUsers = [];
+          }
+
+          if (!registeredUsers.includes(phone)) {
+            registeredUsers.push(phone);
+            localStorage.setItem(storageKey, JSON.stringify(registeredUsers));
           }
           
           localStorage.setItem('kite_has_onboarded', 'true');
@@ -130,14 +146,19 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
           setIsSubmitting(false);
           setOtp(['', '', '', '', '', '']);
           otpInputs.current[0]?.focus();
+          addNotification({
+            type: 'SYSTEM',
+            title: 'Invalid OTP',
+            message: "The OTP you entered is incorrect. Please try again."
+          });
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("Registration error:", err);
         setIsSubmitting(false);
         addNotification({
           type: 'SYSTEM',
           title: 'Error',
-          message: "An error occurred during registration. Please try again."
+          message: `Registration error: ${err.message || 'Please try again.'}`
         });
       }
     };
