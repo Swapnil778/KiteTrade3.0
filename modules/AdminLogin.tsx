@@ -21,8 +21,6 @@ interface AdminLoginProps {
   onBackToUserLogin: () => void;
 }
 
-const ALLOWED_ADMIN_IDENTITIES = ['7666955636', 'Admin.User'];
-
 const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onForgot, onSignUp, onBackToUserLogin }) => {
   const [adminId, setAdminId] = useState('');
   const [password, setPassword] = useState('');
@@ -33,7 +31,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onForgot, onSignUp, on
 
   useEffect(() => {
     const savedAdminId = localStorage.getItem('kite_saved_adminid');
-    if (savedAdminId && ALLOWED_ADMIN_IDENTITIES.includes(savedAdminId)) {
+    if (savedAdminId) {
       setAdminId(savedAdminId);
     }
   }, []);
@@ -46,14 +44,6 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onForgot, onSignUp, on
     if (!adminId || !password) {
       setError('Please enter both Admin ID and Password');
       setIsShaking(true);
-      return;
-    }
-
-    // Strict Identity Check
-    if (!ALLOWED_ADMIN_IDENTITIES.includes(adminId)) {
-      setError('This identity is not authorized for administrative access.');
-      setIsShaking(true);
-      setTimeout(() => setIsShaking(false), 500);
       return;
     }
 

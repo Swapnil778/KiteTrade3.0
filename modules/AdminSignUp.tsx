@@ -7,8 +7,6 @@ interface AdminSignUpProps {
   onSignUpSuccess: (identifier: string) => void;
 }
 
-const ALLOWED_ADMIN_IDENTITIES = ['7666955636', 'Admin.User'];
-
 const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) => {
   const [step, setStep] = useState<'verification' | 'otp' | 'details'>('verification');
   const [adminId, setAdminId] = useState('');
@@ -46,11 +44,8 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
     setError(null);
     setIsShaking(false);
 
-    if (adminId.length < 4) return;
-
-    // Strict Identity Whitelist Check
-    if (!ALLOWED_ADMIN_IDENTITIES.includes(adminId)) {
-      setError("Identity not recognized. Access denied for this ID.");
+    if (adminId.length < 4) {
+      setError("Admin ID must be at least 4 characters.");
       setIsShaking(true);
       setTimeout(() => setIsShaking(false), 500);
       return;
