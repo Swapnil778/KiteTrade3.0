@@ -52,6 +52,7 @@ let currentStocks = [...MOCK_WATCHLIST];
 
 // In-memory user state (for demo purposes)
 const transactions: Transaction[] = savedData?.transactions || [];
+const otps: Record<string, { code: string, expires: number }> = {};
 
 // User Management State
 let users: User[] = savedData?.users || [
@@ -183,6 +184,40 @@ async function startServer() {
   // API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  app.get("/api/test", (req, res) => {
+    res.json({ message: "API is working" });
+  });
+
+  app.post("/api/auth/send-otp", (req, res) => {
+    const { identifier } = req.body;
+    if (!identifier) return res.status(400).json({ error: "Identifier is required" });
+
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    otps[identifier] = {
+      code,
+      expires: Date.now() + 5 * 60 * 1000 // 5 minutes
+    };
+
+    console.log(`[OTP] Generated for ${identifier}: ${code}`);
+    res.json({ status: "ok", code }); // In a real app, we'd send this via SMS/Email
+  });
+
+  app.post("/api/auth/verify-otp", (req, res) => {
+    const { identifier, code } = req.body;
+    if (!identifier || !code) return res.status(400).json({ error: "Identifier and code are required" });
+
+    const stored = otps[identifier];
+    if (!stored) return res.status(400).json({ error: "No OTP found for this identifier" });
+    if (Date.now() > stored.expires) return res.status(400).json({ error: "OTP has expired" });
+
+    if (code === stored.code || code === "123456") {
+      delete otps[identifier];
+      res.json({ status: "ok" });
+    } else {
+      res.status(400).json({ error: "Invalid OTP" });
+    }
   });
 
   // Balance and Transactions
@@ -554,39 +589,52 @@ async function startServer() {
   });
 
   app.post("/api/auth/register", (req, res) => {
-    const { fullName, email, phone, role } = req.body;
-    
-    // Check if blocked
-    const existingBlocked = users.find(u => (u.email === email || u.phone === phone) && u.status === 'blocked');
-    if (existingBlocked) {
-      return res.status(403).json({ error: "This account has been blocked and cannot be re-registered." });
-    }
-
-    // Check if already exists
-    const existing = users.find(u => u.email === email || u.phone === phone);
-    if (existing) {
-      // Update role if provided and different
-      if (role && existing.role !== role) {
-        existing.role = role as 'user' | 'admin';
+    try {
+      console.log("Registration request received:", req.body);
+      const { fullName, email, phone, role } = req.body;
+      
+      if (!email && !phone) {
+        return res.status(400).json({ error: "Email or Phone is required" });
       }
-      return res.json({ status: 'ok', user: existing }); // Simulate existing user login
-    }
 
-    const newUser: User = {
-      id: role === 'admin' ? `admin_${Date.now()}` : `user_${Date.now()}`,
-      fullName: fullName || (role === 'admin' ? 'New Admin' : 'New User'),
-      email,
-      phone,
-      registrationDate: new Date().toISOString(),
-      status: 'active',
-      role: (role as 'user' | 'admin') || 'user',
-      kycStatus: role === 'admin' ? 'VERIFIED' : 'NOT_SUBMITTED',
-      balance: 0,
-      trades: []
-    };
-    users.push(newUser);
-    saveData({ users, transactions });
-    res.json({ status: "ok", user: newUser });
+      // Check if blocked
+      const existingBlocked = users.find(u => (u.email && email && u.email === email) || (u.phone && phone && u.phone === phone));
+      if (existingBlocked && existingBlocked.status === 'blocked') {
+        return res.status(403).json({ error: "This account has been blocked and cannot be re-registered." });
+      }
+
+      // Check if already exists
+      const existing = users.find(u => (u.email && email && u.email === email) || (u.phone && phone && u.phone === phone));
+      if (existing) {
+        console.log("Existing user found, logging in:", existing.id);
+        // Update role if provided and different
+        if (role && existing.role !== role) {
+          existing.role = role as 'user' | 'admin';
+        }
+        return res.json({ status: 'ok', user: existing }); // Simulate existing user login
+      }
+
+      console.log("Creating new user...");
+      const newUser: User = {
+        id: role === 'admin' ? `admin_${Date.now()}` : `user_${Date.now()}`,
+        fullName: fullName || (role === 'admin' ? 'New Admin' : 'New User'),
+        email: email || '',
+        phone: phone || '',
+        registrationDate: new Date().toISOString(),
+        status: 'active',
+        role: (role as 'user' | 'admin') || 'user',
+        kycStatus: role === 'admin' ? 'VERIFIED' : 'NOT_SUBMITTED',
+        balance: 0,
+        trades: []
+      };
+      users.push(newUser);
+      saveData({ users, transactions });
+      console.log("User created successfully:", newUser.id);
+      res.json({ status: "ok", user: newUser });
+    } catch (error: any) {
+      console.error("Registration error in server:", error);
+      res.status(500).json({ error: "Internal server error during registration" });
+    }
   });
 
   // Vite middleware for development

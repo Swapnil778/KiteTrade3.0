@@ -46,22 +46,40 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
     return Math.floor(100000 + Math.random() * 900000).toString();
   };
 
-  const handleDetailsSubmit = () => {
+  const handleDetailsSubmit = async () => {
     if (!fullName || !email || !phone) return;
     setIsSubmitting(true);
     
-    setTimeout(() => {
-      const newOtp = generateRandomOtp();
-      setGeneratedOtp(newOtp);
-      setIsSubmitting(false);
-      setStep('otp');
-      setTimer(120);
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: phone })
+      });
       
-      setTimeout(() => {
+      const data = await res.json();
+      if (res.ok) {
+        setGeneratedOtp(data.code);
+        setStep('otp');
+        setTimer(120);
         setShowNotification(true);
         setTimeout(() => setShowNotification(false), 8000);
-      }, 1200);
-    }, 1500);
+      } else {
+        addNotification({
+          type: 'SYSTEM',
+          title: 'OTP Error',
+          message: data.error || "Failed to send OTP"
+        });
+      }
+    } catch (err) {
+      addNotification({
+        type: 'SYSTEM',
+        title: 'Error',
+        message: "Network error. Please try again."
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleOtpChange = (value: string, index: number) => {
@@ -95,63 +113,75 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
     setIsSubmitting(true);
     const verifyAndRegister = async () => {
       try {
-        if (otpString === generatedOtp || otpString === '123456') {
-          // Register with server
-          const res = await fetch('/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone, fullName, email })
-          });
-          
-          if (!res.ok) {
-            let errorMessage = "Registration failed";
-            try {
-              const data = await res.json();
-              errorMessage = data.error || errorMessage;
-            } catch (e) {
-              // Not JSON
-            }
-            addNotification({
-              type: 'SYSTEM',
-              title: 'Registration Failed',
-              message: errorMessage
-            });
-            setIsSubmitting(false);
-            return;
-          }
+        const verifyRes = await fetch('/api/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: phone, code: otpString })
+        });
 
-          const storageKey = 'kite_registered_users';
-          let registeredUsers = [];
-          try {
-            const saved = localStorage.getItem(storageKey);
-            if (saved) {
-              registeredUsers = JSON.parse(saved);
-              if (!Array.isArray(registeredUsers)) registeredUsers = [];
-            }
-          } catch (e) {
-            registeredUsers = [];
-          }
-
-          if (!registeredUsers.includes(phone)) {
-            registeredUsers.push(phone);
-            localStorage.setItem(storageKey, JSON.stringify(registeredUsers));
-          }
-          
-          localStorage.setItem('kite_has_onboarded', 'true');
-          
-          setIsVerified(true);
-          setIsSubmitting(false);
-          setTimeout(() => onSignUpSuccess(phone), 1500);
-        } else {
+        if (!verifyRes.ok) {
+          const data = await verifyRes.json();
           setIsSubmitting(false);
           setOtp(['', '', '', '', '', '']);
           otpInputs.current[0]?.focus();
           addNotification({
             type: 'SYSTEM',
             title: 'Invalid OTP',
-            message: "The OTP you entered is incorrect. Please try again."
+            message: data.error || "The OTP you entered is incorrect. Please try again."
           });
+          return;
         }
+
+        // Register with server
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, fullName, email })
+        });
+        
+        if (!res.ok) {
+          let errorMessage = `Registration failed (Status: ${res.status})`;
+          try {
+            const data = await res.json();
+            errorMessage = data.error || errorMessage;
+          } catch (e) {
+            // Not JSON, try text
+            try {
+              const text = await res.text();
+              if (text && text.length < 100) errorMessage = text;
+            } catch (e2) {}
+          }
+          addNotification({
+            type: 'SYSTEM',
+            title: 'Registration Failed',
+            message: errorMessage
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
+        const storageKey = 'kite_registered_users';
+        let registeredUsers = [];
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            registeredUsers = JSON.parse(saved);
+            if (!Array.isArray(registeredUsers)) registeredUsers = [];
+          }
+        } catch (e) {
+          registeredUsers = [];
+        }
+
+        if (!registeredUsers.includes(phone)) {
+          registeredUsers.push(phone);
+          localStorage.setItem(storageKey, JSON.stringify(registeredUsers));
+        }
+        
+        localStorage.setItem('kite_has_onboarded', 'true');
+        
+        setIsVerified(true);
+        setIsSubmitting(false);
+        setTimeout(() => onSignUpSuccess(phone), 1500);
       } catch (err: any) {
         console.error("Registration error:", err);
         setIsSubmitting(false);
@@ -326,6 +356,19 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
             >
               {isSubmitting ? <Loader2 className="animate-spin" size={22} /> : "Verify & Complete"}
             </button>
+
+            <div className="flex justify-between items-center mt-4 px-1">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                OTP Expiry: <span className="text-brand-500">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2, '0')}</span>
+              </p>
+              <button 
+                onClick={handleDetailsSubmit}
+                disabled={isSubmitting || timer > 90}
+                className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isSubmitting || timer > 90 ? 'text-gray-700 cursor-not-allowed' : 'text-brand-500 hover:text-brand-400'}`}
+              >
+                Resend OTP
+              </button>
+            </div>
           </>
         )}
       </div>

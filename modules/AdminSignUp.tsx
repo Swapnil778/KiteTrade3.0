@@ -40,7 +40,7 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
     return () => clearInterval(interval);
   }, [step, timer]);
 
-  const handleIdSubmit = () => {
+  const handleIdSubmit = async () => {
     setError(null);
     setIsShaking(false);
 
@@ -53,18 +53,28 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
 
     setIsSubmitting(true);
     
-    // Simulate internal DB check for authorized personnel
-    setTimeout(() => {
-      const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-      setGeneratedOtp(newOtp);
-      setIsSubmitting(false);
-      setStep('otp');
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: adminId })
+      });
       
-      setTimeout(() => {
+      const data = await res.json();
+      if (res.ok) {
+        setGeneratedOtp(data.code);
+        setStep('otp');
+        setTimer(120);
         setShowNotification(true);
         setTimeout(() => setShowNotification(false), 8000);
-      }, 1200);
-    }, 1500);
+      } else {
+        setError(data.error || "Failed to send OTP");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleOtpChange = (value: string, index: number) => {
@@ -82,16 +92,30 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
     if (otpString.length !== 6) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      if (otpString === generatedOtp || otpString === '123456') {
+    const verifyOtp = async () => {
+      try {
+        const res = await fetch('/api/auth/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: adminId, code: otpString })
+        });
+
+        if (res.ok) {
+          setIsSubmitting(false);
+          setStep('details');
+        } else {
+          const data = await res.json();
+          setIsSubmitting(false);
+          setOtp(['', '', '', '', '', '']);
+          otpInputs.current[0]?.focus();
+          setError(data.error || "Invalid OTP");
+        }
+      } catch (err) {
         setIsSubmitting(false);
-        setStep('details');
-      } else {
-        setIsSubmitting(false);
-        setOtp(['', '', '', '', '', '']);
-        otpInputs.current[0]?.focus();
+        setError("Network error. Please try again.");
       }
-    }, 1200);
+    };
+    verifyOtp();
   };
 
   const handleFinalSubmit = async () => {
@@ -283,9 +307,18 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
                   {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : "AUTHORIZE TERMINAL"}
                 </button>
                 
-                <p className="text-center text-[10px] font-black text-gray-600 uppercase tracking-widest">
-                  OTP Expiry: <span className="text-blue-500">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2, '0')}</span>
-                </p>
+                <div className="flex justify-between items-center px-1">
+                  <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">
+                    OTP Expiry: <span className="text-blue-500">{Math.floor(timer/60)}:{(timer%60).toString().padStart(2, '0')}</span>
+                  </p>
+                  <button 
+                    onClick={handleIdSubmit}
+                    disabled={isSubmitting || timer > 90}
+                    className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isSubmitting || timer > 90 ? 'text-gray-800 cursor-not-allowed' : 'text-blue-500 hover:text-blue-400'}`}
+                  >
+                    Resend OTP
+                  </button>
+                </div>
               </div>
             </div>
           </div>
