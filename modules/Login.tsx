@@ -54,62 +54,63 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
       return;
     }
 
-    // Check status with server
-    const checkStatus = async () => {
+    // Login with server
+    const performLogin = async () => {
       try {
-        const res = await fetch('/api/auth/check-status', {
+        const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: inputId })
+          body: JSON.stringify({ identifier: inputId, isAdmin: false })
         });
-        const data = await res.json();
-        return data;
-      } catch (err) {
-        console.error("Status check failed:", err);
-        return { status: 'error' };
-      }
-    };
-
-    const proceedWithLogin = async () => {
-      const data = await checkStatus();
-      
-      if (data.status === 'blocked') {
-        setError(`Your account has been blocked. Reason: ${data.blockReason || 'Violation of terms'}. Please contact support.`);
-        setIsShaking(true);
-        setTimeout(() => setIsShaking(false), 400);
-        return;
-      }
-
-      const isDemo = inputId.toLowerCase() === 'demo';
-      const isRegisteredOnServer = data.status === 'active';
-      
-      if (isDemo || isRegisteredOnServer) {
-        localStorage.setItem('kite_has_onboarded', 'true');
         
-        // Update local storage to remember this user
-        const storageKey = isAdmin ? 'kite_registered_admins' : 'kite_registered_users';
-        const registeredUsers = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        if (!registeredUsers.includes(inputId)) {
-          registeredUsers.push(inputId);
-          localStorage.setItem(storageKey, JSON.stringify(registeredUsers));
+        const data = await res.json();
+        
+        if (!res.ok) {
+          setError(data.error || `Login failed (${res.status})`);
+          setIsShaking(true);
+          setTimeout(() => setIsShaking(false), 400);
+          return;
         }
+        
+        if (data.status === 'ok') {
+          localStorage.setItem('kite_has_onboarded', 'true');
+          
+          // Update local storage to remember this user
+          const storageKey = isAdmin ? 'kite_registered_admins' : 'kite_registered_users';
+          let registeredUsers = [];
+          try {
+            const saved = localStorage.getItem(storageKey);
+            if (saved) {
+              registeredUsers = JSON.parse(saved);
+              if (!Array.isArray(registeredUsers)) registeredUsers = [];
+            }
+          } catch (e) {
+            registeredUsers = [];
+          }
 
-        if (rememberMe) {
-          localStorage.setItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid', inputId);
-          localStorage.setItem('kite_is_logged_in', 'true');
-        } else {
-          localStorage.removeItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid');
-          localStorage.setItem('kite_is_logged_in', 'true');
+          if (!registeredUsers.includes(inputId)) {
+            registeredUsers.push(inputId);
+            localStorage.setItem(storageKey, JSON.stringify(registeredUsers));
+          }
+
+          if (rememberMe) {
+            localStorage.setItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid', inputId);
+            localStorage.setItem('kite_is_logged_in', 'true');
+          } else {
+            localStorage.removeItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid');
+            localStorage.setItem('kite_is_logged_in', 'true');
+          }
+          onLogin(isAdmin, inputId);
         }
-        onLogin(isAdmin, inputId);
-      } else {
-        setError(isAdmin ? 'Staff ID not recognized.' : 'Account not found. Please sign up first.');
+      } catch (err: any) {
+        console.error("Login network error:", err);
+        setError(err.message || "Network connection failed. Please check your internet.");
         setIsShaking(true);
         setTimeout(() => setIsShaking(false), 400);
       }
     };
 
-    proceedWithLogin();
+    performLogin();
   };
 
   const removeRecent = (acc: string, e: React.MouseEvent) => {

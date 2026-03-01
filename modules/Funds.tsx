@@ -151,12 +151,12 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
           message: data.error || "Failed to process fee payment."
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Fee payment error:", err);
       addNotification({
         type: 'SYSTEM',
         title: 'Network Error',
-        message: "Network error. Please try again."
+        message: err.message || "Network error. Please check your connection and try again."
       });
     } finally {
       setIsProcessing(false);

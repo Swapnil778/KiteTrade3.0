@@ -70,8 +70,9 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
       } else {
         setError(data.error || "Failed to send OTP");
       }
-    } catch (err) {
-      setError("Network error. Please try again.");
+    } catch (err: any) {
+      console.error("Admin OTP send network error:", err);
+      setError(err.message || "Network error. Please check your internet connection and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -110,9 +111,9 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
           otpInputs.current[0]?.focus();
           setError(data.error || "Invalid OTP");
         }
-      } catch (err) {
+      } catch (err: any) {
         setIsSubmitting(false);
-        setError("Network error. Please try again.");
+        setError(err.message || "Network error. Please check your internet connection and try again.");
       }
     };
     verifyOtp();

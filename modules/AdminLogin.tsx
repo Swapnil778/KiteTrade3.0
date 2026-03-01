@@ -49,68 +49,60 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onForgot, onSignUp, on
 
     setIsLoggingIn(true);
 
-    // Check status with server
-    const checkStatus = async () => {
+    // Login with server
+    const performLogin = async () => {
       try {
-        const res = await fetch('/api/auth/check-status', {
+        const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: adminId })
+          body: JSON.stringify({ identifier: adminId, password, isAdmin: true })
         });
-        const data = await res.json();
-        return data;
-      } catch (err) {
-        console.error("Status check failed:", err);
-        return { status: 'error' };
-      }
-    };
-
-    const proceedWithLogin = async () => {
-      const data = await checkStatus();
-      
-      if (data.status === 'blocked') {
-        setError(`Your account has been blocked. Reason: ${data.blockReason || 'Violation of terms'}. Please contact support.`);
-        setIsLoggingIn(false);
-        setIsShaking(true);
-        setTimeout(() => setIsShaking(false), 500);
-        return;
-      }
-
-      const isRegisteredOnServer = data.status === 'active';
-
-      if (isRegisteredOnServer) {
-        localStorage.setItem('kite_saved_adminid', adminId);
-        localStorage.setItem('kite_is_logged_in', 'true');
-        localStorage.setItem('kite_current_screen', 'ADMIN_PANEL');
         
-        // Update local storage to remember this admin
-        const storageKey = 'kite_registered_admins';
-        let registeredAdmins = [];
-        try {
-          const saved = localStorage.getItem(storageKey);
-          if (saved) {
-            registeredAdmins = JSON.parse(saved);
-            if (!Array.isArray(registeredAdmins)) registeredAdmins = [];
+        const data = await res.json();
+        
+        if (!res.ok) {
+          setError(data.error || `Authentication failed (${res.status})`);
+          setIsLoggingIn(false);
+          setIsShaking(true);
+          setTimeout(() => setIsShaking(false), 500);
+          return;
+        }
+        
+        if (data.status === 'ok') {
+          localStorage.setItem('kite_saved_adminid', adminId);
+          localStorage.setItem('kite_is_logged_in', 'true');
+          localStorage.setItem('kite_current_screen', 'ADMIN_PANEL');
+          
+          // Update local storage to remember this admin
+          const storageKey = 'kite_registered_admins';
+          let registeredAdmins = [];
+          try {
+            const saved = localStorage.getItem(storageKey);
+            if (saved) {
+              registeredAdmins = JSON.parse(saved);
+              if (!Array.isArray(registeredAdmins)) registeredAdmins = [];
+            }
+          } catch (e) {
+            registeredAdmins = [];
           }
-        } catch (e) {
-          registeredAdmins = [];
-        }
 
-        if (!registeredAdmins.includes(adminId)) {
-          registeredAdmins.push(adminId);
-          localStorage.setItem(storageKey, JSON.stringify(registeredAdmins));
-        }
+          if (!registeredAdmins.includes(adminId)) {
+            registeredAdmins.push(adminId);
+            localStorage.setItem(storageKey, JSON.stringify(registeredAdmins));
+          }
 
-        onLogin(adminId);
-      } else {
-        setError('Credentials not found. Please complete staff onboarding first.');
+          onLogin(adminId);
+        }
+      } catch (err: any) {
+        console.error("Admin login network error:", err);
+        setError(err.message || "Network connection failed. Please check your internet.");
         setIsLoggingIn(false);
         setIsShaking(true);
         setTimeout(() => setIsShaking(false), 500);
       }
     };
 
-    proceedWithLogin();
+    performLogin();
   };
 
   return (

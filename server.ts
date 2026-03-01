@@ -568,23 +568,54 @@ async function startServer() {
     }
   });
 
-  app.post("/api/auth/check-status", (req, res) => {
-    const { identifier } = req.body; // email or phone
-    const user = users.find(u => u.email === identifier || u.phone === identifier);
-    if (user) {
-      res.json({ status: user.status, blockReason: user.blockReason });
-    } else {
-      res.json({ status: 'not_found' });
+  app.post("/api/auth/login", (req, res) => {
+    try {
+      const { identifier, password, isAdmin } = req.body;
+      if (!identifier) return res.status(400).json({ error: "Identifier is required" });
+
+      const user = users.find(u => u.id === identifier || u.email === identifier || u.phone === identifier);
+      
+      if (!user) {
+        return res.status(404).json({ error: isAdmin ? "Staff ID not recognized." : "Account not found. Please sign up first." });
+      }
+
+      if (user.status === 'blocked') {
+        return res.status(403).json({ 
+          status: 'blocked', 
+          error: `Your account has been blocked. Reason: ${user.blockReason || 'Violation of terms'}. Please contact support.` 
+        });
+      }
+
+      if (isAdmin) {
+        if (user.role !== 'admin') {
+          return res.status(403).json({ error: "Access denied. Not an administrator." });
+        }
+        // In a real app, check password. For demo, we'll allow any password if it's the right user.
+        // But let's add a simple check for 'admin123' as a default password.
+        if (password && password !== 'admin123' && password !== 'password') {
+          return res.status(401).json({ error: "Invalid security credentials." });
+        }
+      }
+
+      res.json({ status: 'ok', user });
+    } catch (error: any) {
+      console.error("Login error in server:", error);
+      res.status(500).json({ error: "Internal server error during login" });
     }
   });
 
   app.post("/api/auth/profile", (req, res) => {
-    const { identifier } = req.body;
-    const user = users.find(u => u.email === identifier || u.phone === identifier || u.id === identifier);
-    if (user) {
-      res.json(user);
-    } else {
-      res.status(404).json({ error: "User not found" });
+    try {
+      const { identifier } = req.body;
+      const user = users.find(u => u.email === identifier || u.phone === identifier || u.id === identifier);
+      if (user) {
+        res.json(user);
+      } else {
+        res.status(404).json({ error: "User not found" });
+      }
+    } catch (error: any) {
+      console.error("Profile fetch error in server:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

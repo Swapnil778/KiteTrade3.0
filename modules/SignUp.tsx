@@ -71,11 +71,12 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
           message: data.error || "Failed to send OTP"
         });
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error("OTP send network error:", err);
       addNotification({
         type: 'SYSTEM',
-        title: 'Error',
-        message: "Network error. Please try again."
+        title: 'Connection Error',
+        message: err.message || "Network error. Please check your internet connection and try again."
       });
     } finally {
       setIsSubmitting(false);
