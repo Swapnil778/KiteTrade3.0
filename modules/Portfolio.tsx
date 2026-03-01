@@ -29,27 +29,38 @@ import {
 import { Holding, Stock, Order } from '../types';
 import { GoogleGenAI } from "@google/genai";
 import { useNotifications } from '../components/NotificationProvider';
+import { apiRequest } from '../services/apiService';
 
 const Portfolio: React.FC = () => {
   const { addNotification } = useNotifications();
   const [activeTab, setActiveTab] = useState<'holdings' | 'positions' | 'history'>('holdings');
-  const [holdings, setHoldings] = useState<Holding[]>(MOCK_HOLDINGS);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [tradeHistory, setTradeHistory] = useState<Order[]>([]);
-  const userId = localStorage.getItem('kite_current_user_id') || 'demo_user';
+  const [isLoading, setIsLoading] = useState(true);
+  const userId = localStorage.getItem('kite_current_user_id') || localStorage.getItem('kite_saved_userid');
 
   useEffect(() => {
-    const fetchTradeHistory = async () => {
+    const fetchData = async () => {
+      if (!userId) {
+        setIsLoading(false);
+        return;
+      }
+      
       try {
-        const res = await fetch(`/api/user/trade-history?userId=${userId}`);
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setTradeHistory(data);
-        }
+        const [historyData, portfolioData] = await Promise.all([
+          apiRequest<Order[]>(`/api/user/orders/${userId}`),
+          apiRequest<Holding[]>(`/api/user/portfolio/${userId}`)
+        ]);
+        
+        setTradeHistory(historyData);
+        setHoldings(portfolioData);
       } catch (err) {
-        console.error("Failed to fetch trade history:", err);
+        console.error("Failed to fetch portfolio data:", err);
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchTradeHistory();
+    fetchData();
   }, [userId]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<string | null>(null);
@@ -227,9 +238,8 @@ const Portfolio: React.FC = () => {
     }
 
     try {
-      const res = await fetch('/api/user/trade', {
+      const data = await apiRequest<any>('/api/user/trade', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
           symbol: selectedHolding.symbol,
@@ -239,72 +249,17 @@ const Portfolio: React.FC = () => {
         })
       });
 
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Trade failed");
-      }
-
-      const data = await res.json();
       const newTrade = data.trade;
-
       setTradeHistory(prevHistory => [newTrade, ...prevHistory]);
-
-      setHoldings(prev => {
-      const existing = prev.find(h => h.symbol === selectedHolding.symbol);
       
-      if (existing) {
-        if (tradeType === 'BUY') {
-          const newQty = existing.quantity + qty;
-          const newInvested = existing.investedValue + (qty * selectedHolding.ltp);
-          return prev.map(h => h.symbol === selectedHolding.symbol ? {
-            ...h,
-            quantity: newQty,
-            investedValue: newInvested,
-            avgPrice: newInvested / newQty,
-            currentValue: newQty * h.ltp,
-            totalPnL: (newQty * h.ltp) - newInvested,
-            stopLoss: !isNaN(sl) && sl > 0 ? sl : h.stopLoss
-          } : h);
-        } else {
-          const newQty = Math.max(0, existing.quantity - qty);
-          if (newQty === 0) return prev.filter(h => h.symbol !== selectedHolding.symbol);
-          const ratio = newQty / existing.quantity;
-          const newInvested = existing.investedValue * ratio;
-          return prev.map(h => h.symbol === selectedHolding.symbol ? {
-            ...h,
-            quantity: newQty,
-            investedValue: newInvested,
-            currentValue: newQty * h.ltp,
-            totalPnL: (newQty * h.ltp) - newInvested,
-            stopLoss: !isNaN(sl) && sl > 0 ? sl : h.stopLoss
-          } : h);
-        }
-      } else if (tradeType === 'BUY') {
-        const newHolding: Holding = {
-          symbol: selectedHolding.symbol,
-          name: selectedHolding.name,
-          exchange: selectedHolding.exchange || 'FOREX',
-          quantity: qty,
-          avgPrice: selectedHolding.ltp,
-          ltp: selectedHolding.ltp,
-          change: 0,
-          percentChange: 0,
-          investedValue: qty * selectedHolding.ltp,
-          currentValue: qty * selectedHolding.ltp,
-          totalPnL: 0,
-          dayPnL: 0,
-          isUp: true,
-          stopLoss: !isNaN(sl) && sl > 0 ? sl : undefined
-        };
-        return [...prev, newHolding];
-      }
-      return prev;
-    });
+      // Refresh portfolio data
+      const portfolioData = await apiRequest<Holding[]>(`/api/user/portfolio/${userId}`);
+      setHoldings(portfolioData);
 
-    setSelectedHolding(null);
-    setTradeType(null);
-    setTradeQuantity('');
-    setTradeStopLoss('');
+      setSelectedHolding(null);
+      setTradeType(null);
+      setTradeQuantity('');
+      setTradeStopLoss('');
     } catch (err: any) {
       addNotification({
         type: 'SYSTEM',
@@ -312,7 +267,7 @@ const Portfolio: React.FC = () => {
         message: err.message
       });
     }
-};
+  };
 
   const historicalPnL = useMemo(() => {
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -389,7 +344,12 @@ const Portfolio: React.FC = () => {
       </div>
 
       <div className="p-5 space-y-6 flex-1 overflow-y-auto hide-scrollbar pb-48">
-        {activeTab === 'history' ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-24">
+            <Loader2 className="animate-spin text-brand-500 mb-4" size={32} />
+            <p className="text-sm text-gray-400 font-medium uppercase tracking-widest">Loading Portfolio...</p>
+          </div>
+        ) : activeTab === 'history' ? (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="flex justify-between items-center mb-2">
               <h3 className="text-base font-black text-gray-900 dark:text-white flex items-center gap-2 uppercase tracking-tight">

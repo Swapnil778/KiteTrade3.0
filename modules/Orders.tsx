@@ -1,12 +1,42 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { MOCK_ORDERS } from '../constants';
-import { Filter, Download, FileText, Search, RefreshCcw, Trash2 } from 'lucide-react';
+import { Filter, Download, FileText, Search, RefreshCcw, Trash2, Loader2 } from 'lucide-react';
 import { Order } from '../types';
+import { apiRequest } from '../services/apiService';
+import { useNotifications } from '../components/NotificationProvider';
 
 const Orders: React.FC = () => {
   const [activeTab, setActiveTab] = useState('executed');
-  const [orders, setOrders] = useState<Order[]>([]); // Starts empty as requested
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const { addNotification } = useNotifications();
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      const userId = localStorage.getItem('kite_current_user_id') || localStorage.getItem('kite_saved_userid');
+      if (!userId) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const data = await apiRequest<Order[]>(`/api/user/orders/${userId}`);
+        setOrders(data);
+      } catch (err: any) {
+        console.error("Failed to fetch orders:", err);
+        addNotification({
+          type: 'SYSTEM',
+          title: 'Fetch Error',
+          message: 'Unable to load your orders. Please try again.'
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
@@ -136,7 +166,12 @@ const Orders: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto hide-scrollbar">
-        {activeTab === 'executed' ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-24">
+            <Loader2 className="animate-spin text-[#387ed1] mb-4" size={32} />
+            <p className="text-sm text-gray-400 font-medium uppercase tracking-widest">Loading Orders...</p>
+          </div>
+        ) : activeTab === 'executed' ? (
           orders.length > 0 ? (
             filteredOrders.length > 0 ? (
               <div className="divide-y divide-gray-50 dark:divide-gray-800">

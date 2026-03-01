@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, AlertCircle, Check, ArrowRight, User, X, ShieldCheck, Lock } from 'lucide-react';
+import { apiRequest } from '../services/apiService';
 
 interface LoginProps {
   onLogin: (isAdmin?: boolean, identifier?: string) => void;
@@ -57,20 +58,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
     // Login with server
     const performLogin = async () => {
       try {
-        const res = await fetch('/api/auth/login', {
+        const data = await apiRequest<any>('/api/auth/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier: inputId, isAdmin: false })
         });
-        
-        const data = await res.json();
-        
-        if (!res.ok) {
-          setError(data.error || `Login failed (${res.status})`);
-          setIsShaking(true);
-          setTimeout(() => setIsShaking(false), 400);
-          return;
-        }
         
         if (data.status === 'ok') {
           localStorage.setItem('kite_has_onboarded', 'true');
@@ -103,7 +94,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
           onLogin(isAdmin, inputId);
         }
       } catch (err: any) {
-        console.error("Login network error:", err);
+        console.error("Login error:", err);
         setError(err.message || "Network connection failed. Please check your internet.");
         setIsShaking(true);
         setTimeout(() => setIsShaking(false), 400);

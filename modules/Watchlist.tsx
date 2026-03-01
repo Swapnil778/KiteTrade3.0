@@ -18,6 +18,7 @@ import { MOCK_WATCHLIST } from '../constants';
 import { Stock } from '../types';
 import { GoogleGenAI } from "@google/genai";
 import { useNotifications } from '../components/NotificationProvider';
+import { apiRequest } from '../services/apiService';
 
 interface WatchlistProps {
   onOrderPlaced: () => void;
@@ -296,9 +297,8 @@ const Watchlist: React.FC<WatchlistProps> = ({ onOrderPlaced }) => {
     }
 
     try {
-      const res = await fetch('/api/user/trade', {
+      const data = await apiRequest<any>('/api/user/trade', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId,
           symbol: currentSelectedStock.symbol,
@@ -307,11 +307,6 @@ const Watchlist: React.FC<WatchlistProps> = ({ onOrderPlaced }) => {
           quantity: qty
         })
       });
-
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Trade failed");
-      }
 
       onOrderPlaced();
     } catch (err: any) {

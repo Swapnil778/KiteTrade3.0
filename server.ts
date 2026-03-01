@@ -619,6 +619,92 @@ async function startServer() {
     }
   });
 
+  app.get("/api/user/orders/:userId", (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = users.find(u => u.id === userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      
+      // For demo, we return user's trades as orders
+      res.json(user.trades || []);
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.get("/api/user/portfolio/:userId", (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = users.find(u => u.id === userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+      
+      // Calculate portfolio from trades
+      const portfolio: Record<string, any> = {};
+      (user.trades || []).forEach(trade => {
+        if (!portfolio[trade.symbol]) {
+          portfolio[trade.symbol] = { symbol: trade.symbol, quantity: 0, avgPrice: 0, totalCost: 0 };
+        }
+        
+        if (trade.type === 'BUY') {
+          portfolio[trade.symbol].quantity += trade.quantity;
+          portfolio[trade.symbol].totalCost += trade.price * trade.quantity;
+        } else {
+          portfolio[trade.symbol].quantity -= trade.quantity;
+          portfolio[trade.symbol].totalCost -= trade.price * trade.quantity;
+        }
+        
+        if (portfolio[trade.symbol].quantity > 0) {
+          portfolio[trade.symbol].avgPrice = portfolio[trade.symbol].totalCost / portfolio[trade.symbol].quantity;
+        } else {
+          portfolio[trade.symbol].avgPrice = 0;
+          portfolio[trade.symbol].totalCost = 0;
+        }
+      });
+
+      const holdings = Object.values(portfolio).filter(p => p.quantity > 0);
+      res.json(holdings);
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/user/trade", (req, res) => {
+    try {
+      const { userId, symbol, type, price, quantity } = req.body;
+      const user = users.find(u => u.id === userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const totalValue = price * quantity;
+      if (type === 'BUY' && user.balance < totalValue) {
+        return res.status(400).json({ error: "Insufficient balance" });
+      }
+
+      const trade = {
+        id: `tr_${Date.now()}`,
+        symbol,
+        type,
+        price,
+        quantity,
+        status: 'COMPLETED' as const,
+        time: new Date().toLocaleString()
+      };
+
+      user.trades = user.trades || [];
+      user.trades.push(trade);
+      
+      if (type === 'BUY') {
+        user.balance -= totalValue;
+      } else {
+        user.balance += totalValue;
+      }
+
+      saveData({ users, transactions });
+      res.json({ status: 'ok', trade, balance: user.balance });
+    } catch (error) {
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   app.post("/api/auth/register", (req, res) => {
     try {
       console.log("Registration request received:", req.body);

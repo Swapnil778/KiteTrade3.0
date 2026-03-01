@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
+import { apiRequest } from './services/apiService';
 import { AppScreen, User } from './types';
 import { NotificationProvider, useNotifications } from './components/NotificationProvider';
 import Login from './modules/Login';
@@ -75,23 +77,23 @@ const AppContent: React.FC = () => {
       if (!identifier) return;
 
       try {
-        const res = await fetch('/api/auth/profile', {
+        const data = await apiRequest<User>('/api/auth/profile', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier })
         });
         
-        if (!res.ok) return;
-
-        const data = await res.json();
         setUser(data);
 
         if (data.status === 'blocked') {
-          alert(`Your account has been blocked. Reason: ${data.blockReason || 'Violation of terms'}. You will be logged out.`);
+          addNotification({
+            type: 'SYSTEM',
+            title: 'Account Blocked',
+            message: `Your account has been blocked. Reason: ${data.blockReason || 'Violation of terms'}.`
+          });
           handleLogout();
         }
-      } catch (err) {
-        if (err instanceof TypeError && err.message === 'Failed to fetch') return;
+      } catch (err: any) {
+        // Silent fail for profile fetch to avoid annoying popups on every 30s check
         console.error("Profile fetch error:", err);
       }
     };
@@ -237,9 +239,11 @@ const AppContent: React.FC = () => {
 };
 
 const App: React.FC = () => (
-  <NotificationProvider>
-    <AppContent />
-  </NotificationProvider>
+  <ErrorBoundary>
+    <NotificationProvider>
+      <AppContent />
+    </NotificationProvider>
+  </ErrorBoundary>
 );
 
 const container = document.getElementById('root');

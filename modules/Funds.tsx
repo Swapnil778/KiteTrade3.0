@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, HelpCircle, X, AlertCircle, CheckCircle2, Loader2, CreditCard, Landmark, Smartphone, ArrowRight, Lock, ShieldAlert, ShieldCheck, Zap, History, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { Transaction } from '../types';
 import { useNotifications } from '../components/NotificationProvider';
+import { apiRequest } from '../services/apiService';
 
 interface FundsProps {
   onBack: () => void;
@@ -66,8 +67,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
 
   const fetchTransactions = async () => {
     try {
-      const res = await fetch(`/api/user/transactions?userId=${userId}`);
-      const data = await res.json();
+      const data = await apiRequest<Transaction[]>(`/api/user/transactions?userId=${userId}`);
       if (Array.isArray(data)) {
         setTransactions(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
       }
@@ -79,8 +79,7 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
   useEffect(() => {
     const fetchBalance = async () => {
       try {
-        const res = await fetch(`/api/user/balance?userId=${userId}`);
-        const data = await res.json();
+        const data = await apiRequest<any>(`/api/user/balance?userId=${userId}`);
         if (data.balance !== undefined) {
           setBalance(data.balance);
         }
@@ -121,9 +120,8 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
 
     setIsProcessing(true);
     try {
-      const res = await fetch('/api/user/withdraw', {
+      const data = await apiRequest<any>('/api/user/withdraw', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           amount: FEE_AMOUNT,
           userId,
@@ -131,32 +129,22 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
         })
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setBalance(data.balance);
-        fetchTransactions();
-        setIsFeePaid(true);
-        localStorage.setItem('kite_withdrawal_fee_paid', 'true');
-        setIsSuccess(true);
-        setTimeout(() => {
-          setShowFeePrompt(false);
-          setIsSuccess(false);
-          setTimeout(() => setShowLockedStatus(true), 500);
-        }, 2000);
-      } else {
-        const data = await res.json();
-        addNotification({
-          type: 'SYSTEM',
-          title: 'Payment Failed',
-          message: data.error || "Failed to process fee payment."
-        });
-      }
+      setBalance(data.balance);
+      fetchTransactions();
+      setIsFeePaid(true);
+      localStorage.setItem('kite_withdrawal_fee_paid', 'true');
+      setIsSuccess(true);
+      setTimeout(() => {
+        setShowFeePrompt(false);
+        setIsSuccess(false);
+        setTimeout(() => setShowLockedStatus(true), 500);
+      }, 2000);
     } catch (err: any) {
       console.error("Fee payment error:", err);
       addNotification({
         type: 'SYSTEM',
-        title: 'Network Error',
-        message: err.message || "Network error. Please check your connection and try again."
+        title: 'Payment Failed',
+        message: err.message || "Failed to process fee payment."
       });
     } finally {
       setIsProcessing(false);
@@ -191,23 +179,18 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
       }
 
       // 1. Get Razorpay Key
-      const keyRes = await fetch('/api/payments/razorpay-key');
-      const { keyId, isDemo: keyIsDemo } = await keyRes.json();
+      const { keyId, isDemo: keyIsDemo } = await apiRequest<any>('/api/payments/razorpay-key');
 
       if (!keyId) {
         throw new Error("Razorpay Key ID not found. Please configure environment variables.");
       }
 
       // 2. Create Order on Server
-      const orderRes = await fetch('/api/payments/create-order', {
+      const order = await apiRequest<any>('/api/payments/create-order', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount, currency: 'INR' }) // Using INR for Razorpay
       });
       
-      const order = await orderRes.json();
-      if (order.error) throw new Error(order.error);
-
       const isDemo = keyIsDemo || order.isDemo;
 
       // 3. Initialize Razorpay Checkout
@@ -221,9 +204,8 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
         handler: async function (response: any) {
           try {
             // Verify payment on server
-            const verifyRes = await fetch('/api/payments/verify', {
+            const verifyData = await apiRequest<any>('/api/payments/verify', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -234,7 +216,6 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
               })
             });
 
-            const verifyData = await verifyRes.json();
             if (verifyData.status === 'ok') {
               setBalance(verifyData.balance);
               fetchTransactions();
