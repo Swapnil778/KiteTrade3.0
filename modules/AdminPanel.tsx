@@ -11,6 +11,7 @@ import {
   UserCircle, Percent, Shield, Loader2, Menu
 } from 'lucide-react';
 import { AdminRole, AdminStats, AuditLog, PaymentDetail, Transaction, User } from '../types';
+import { apiRequest } from '../services/apiService';
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrlEzw5XgJfVrqyu8DZRHfDQNYF85n38Q",
@@ -102,8 +103,7 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
   const fetchUsers = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/admin/users');
-      const data = await res.json();
+      const data = await apiRequest<User[]>('/api/admin/users');
       setUsers(data);
     } catch (err) {
       console.error("Failed to fetch users:", err);
@@ -119,21 +119,18 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
   const handleBlockUser = async () => {
     if (!showBlockModal) return;
     try {
-      const res = await fetch('/api/admin/users/block', {
+      await apiRequest<any>('/api/admin/users/block', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           userId: showBlockModal.userId, 
           reason: blockReason,
           adminId: 'MASTER-ADMIN'
         })
       });
-      if (res.ok) {
-        addLog(`User Blocked: ${showBlockModal.fullName}`, showBlockModal.userId);
-        fetchUsers();
-        setShowBlockModal(null);
-        setBlockReason('');
-      }
+      addLog(`User Blocked: ${showBlockModal.fullName}`, showBlockModal.userId);
+      fetchUsers();
+      setShowBlockModal(null);
+      setBlockReason('');
     } catch (err) {
       console.error("Failed to block user:", err);
     }
@@ -142,15 +139,12 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
   const handleUnblockUser = async (userId: string, fullName: string) => {
     if (!confirm(`Are you sure you want to unblock ${fullName}?`)) return;
     try {
-      const res = await fetch('/api/admin/users/unblock', {
+      await apiRequest<any>('/api/admin/users/unblock', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId })
       });
-      if (res.ok) {
-        addLog(`User Unblocked: ${fullName}`, userId);
-        fetchUsers();
-      }
+      addLog(`User Unblocked: ${fullName}`, userId);
+      fetchUsers();
     } catch (err) {
       console.error("Failed to unblock user:", err);
     }
@@ -158,16 +152,13 @@ const UserManagement = ({ addLog, onViewPayments }: { addLog: any, onViewPayment
 
   const handleKycUpdate = async (userId: string, status: User['kycStatus']) => {
     try {
-      const res = await fetch('/api/admin/users/kyc-update', {
+      await apiRequest<any>('/api/admin/users/kyc-update', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, status })
       });
-      if (res.ok) {
-        addLog(`KYC ${status}: ${userId}`, userId);
-        fetchUsers();
-        setShowKycModal(null);
-      }
+      addLog(`KYC ${status}: ${userId}`, userId);
+      fetchUsers();
+      setShowKycModal(null);
     } catch (err) {
       console.error("Failed to update KYC:", err);
     }
@@ -748,8 +739,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onLogout, onExitAdmin }) => {
 
   const fetchStats = async () => {
     try {
-      const res = await fetch('/api/admin/stats');
-      const data = await res.json();
+      const data = await apiRequest<AdminStats>('/api/admin/stats');
       setStats(data);
     } catch (err) {
       console.error("Failed to fetch stats:", err);

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ArrowRight, Loader2, CheckCircle2, MessageSquare, ShieldCheck } from 'lucide-react';
 import { useNotifications } from '../components/NotificationProvider';
+import { apiRequest } from '../services/apiService';
 
 interface SignUpProps {
   onBack: () => void;
@@ -51,32 +52,22 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
     setIsSubmitting(true);
     
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const data = await apiRequest<any>('/api/auth/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: phone })
       });
       
-      const data = await res.json();
-      if (res.ok) {
-        setGeneratedOtp(data.code);
-        setStep('otp');
-        setTimer(120);
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 8000);
-      } else {
-        addNotification({
-          type: 'SYSTEM',
-          title: 'OTP Error',
-          message: data.error || "Failed to send OTP"
-        });
-      }
+      setGeneratedOtp(data.code);
+      setStep('otp');
+      setTimer(120);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 8000);
     } catch (err: any) {
       console.error("OTP send network error:", err);
       addNotification({
         type: 'SYSTEM',
-        title: 'Connection Error',
-        message: err.message || "Network error. Please check your internet connection and try again."
+        title: 'OTP Error',
+        message: err.message || "Failed to send OTP"
       });
     } finally {
       setIsSubmitting(false);
@@ -114,53 +105,17 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
     setIsSubmitting(true);
     const verifyAndRegister = async () => {
       try {
-        const verifyRes = await fetch('/api/auth/verify-otp', {
+        await apiRequest<any>('/api/auth/verify-otp', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier: phone, code: otpString })
         });
 
-        if (!verifyRes.ok) {
-          const data = await verifyRes.json();
-          setIsSubmitting(false);
-          setOtp(['', '', '', '', '', '']);
-          otpInputs.current[0]?.focus();
-          addNotification({
-            type: 'SYSTEM',
-            title: 'Invalid OTP',
-            message: data.error || "The OTP you entered is incorrect. Please try again."
-          });
-          return;
-        }
-
         // Register with server
-        const res = await fetch('/api/auth/register', {
+        await apiRequest<any>('/api/auth/register', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ phone, fullName, email })
         });
         
-        if (!res.ok) {
-          let errorMessage = `Registration failed (Status: ${res.status})`;
-          try {
-            const data = await res.json();
-            errorMessage = data.error || errorMessage;
-          } catch (e) {
-            // Not JSON, try text
-            try {
-              const text = await res.text();
-              if (text && text.length < 100) errorMessage = text;
-            } catch (e2) {}
-          }
-          addNotification({
-            type: 'SYSTEM',
-            title: 'Registration Failed',
-            message: errorMessage
-          });
-          setIsSubmitting(false);
-          return;
-        }
-
         const storageKey = 'kite_registered_users';
         let registeredUsers = [];
         try {
@@ -186,10 +141,12 @@ const SignUp: React.FC<SignUpProps> = ({ onBack, onSignUpSuccess, onAdminSignUp 
       } catch (err: any) {
         console.error("Registration error:", err);
         setIsSubmitting(false);
+        setOtp(['', '', '', '', '', '']);
+        otpInputs.current[0]?.focus();
         addNotification({
           type: 'SYSTEM',
           title: 'Error',
-          message: `Registration error: ${err.message || 'Please try again.'}`
+          message: err.message || 'Registration failed. Please try again.'
         });
       }
     };

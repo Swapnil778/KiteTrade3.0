@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { ChevronLeft, Loader2, CheckCircle2, ShieldQuestion, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { apiRequest } from '../services/apiService';
 
 interface ForgotPasswordProps {
   onBack: () => void;
@@ -37,15 +38,28 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack }) => {
     setIsSubmitting(true);
     
     // Simulate API call for password reset
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSuccess(true);
-      
-      // Auto-return to login after 3 seconds of showing success
-      setTimeout(() => {
-        onBack();
-      }, 3000);
-    }, 2000);
+    const performReset = async () => {
+      try {
+        // In a real app, we'd call an endpoint like /api/auth/reset-password
+        // For now, we'll simulate it but use apiRequest for consistency if we had an endpoint
+        // await apiRequest('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ email, password }) });
+        
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        setIsSubmitting(false);
+        setIsSuccess(true);
+        
+        // Auto-return to login after 3 seconds of showing success
+        setTimeout(() => {
+          onBack();
+        }, 3000);
+      } catch (err: any) {
+        setIsSubmitting(false);
+        setError(err.message || "Failed to reset password. Please try again.");
+      }
+    };
+
+    performReset();
   };
 
   if (isSuccess) {

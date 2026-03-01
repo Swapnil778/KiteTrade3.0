@@ -16,6 +16,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { User } from '../types';
+import { apiRequest } from '../services/apiService';
 
 interface ProfileProps {
   onBack: () => void;
@@ -39,15 +40,11 @@ const Profile: React.FC<ProfileProps> = ({ onBack, user: initialUser }) => {
         return;
       }
       try {
-        const res = await fetch('/api/auth/profile', {
+        const data = await apiRequest<User>('/api/auth/profile', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier })
         });
-        if (res.ok) {
-          const data = await res.json();
-          setUser(data);
-        }
+        setUser(data);
       } catch (err) {
         console.error("Failed to fetch profile:", err);
       } finally {

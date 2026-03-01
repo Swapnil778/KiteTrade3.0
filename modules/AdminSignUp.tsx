@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ArrowRight, Loader2, ShieldCheck, ShieldAlert, MessageSquare, CheckCircle2, Building2, UserCircle, Key, AlertCircle } from 'lucide-react';
+import { apiRequest } from '../services/apiService';
 
 interface AdminSignUpProps {
   onBack: () => void;
@@ -54,25 +55,19 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
     setIsSubmitting(true);
     
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const data = await apiRequest<any>('/api/auth/send-otp', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ identifier: adminId })
       });
       
-      const data = await res.json();
-      if (res.ok) {
-        setGeneratedOtp(data.code);
-        setStep('otp');
-        setTimer(120);
-        setShowNotification(true);
-        setTimeout(() => setShowNotification(false), 8000);
-      } else {
-        setError(data.error || "Failed to send OTP");
-      }
+      setGeneratedOtp(data.code);
+      setStep('otp');
+      setTimer(120);
+      setShowNotification(true);
+      setTimeout(() => setShowNotification(false), 8000);
     } catch (err: any) {
       console.error("Admin OTP send network error:", err);
-      setError(err.message || "Network error. Please check your internet connection and try again.");
+      setError(err.message || "Failed to send OTP");
     } finally {
       setIsSubmitting(false);
     }
@@ -95,25 +90,18 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
     setIsSubmitting(true);
     const verifyOtp = async () => {
       try {
-        const res = await fetch('/api/auth/verify-otp', {
+        await apiRequest<any>('/api/auth/verify-otp', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier: adminId, code: otpString })
         });
 
-        if (res.ok) {
-          setIsSubmitting(false);
-          setStep('details');
-        } else {
-          const data = await res.json();
-          setIsSubmitting(false);
-          setOtp(['', '', '', '', '', '']);
-          otpInputs.current[0]?.focus();
-          setError(data.error || "Invalid OTP");
-        }
+        setIsSubmitting(false);
+        setStep('details');
       } catch (err: any) {
         setIsSubmitting(false);
-        setError(err.message || "Network error. Please check your internet connection and try again.");
+        setOtp(['', '', '', '', '', '']);
+        otpInputs.current[0]?.focus();
+        setError(err.message || "Invalid OTP");
       }
     };
     verifyOtp();
@@ -122,9 +110,8 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
   const handleFinalSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/auth/register', {
+      await apiRequest<any>('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           fullName: `Admin ${adminId}`, 
           email: `${adminId.replace('.', '_')}@kitetrade.admin`, 
@@ -132,13 +119,6 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
           role: 'admin'
         })
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Registration failed");
-        setIsSubmitting(false);
-        return;
-      }
 
       const storageKey = 'kite_registered_admins';
       let registeredAdmins = [];
@@ -161,10 +141,10 @@ const AdminSignUp: React.FC<AdminSignUpProps> = ({ onBack, onSignUpSuccess }) =>
       setIsVerified(true);
       setIsSubmitting(false);
       setTimeout(() => onSignUpSuccess(adminId), 1500);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Admin registration error:", err);
       setIsSubmitting(false);
-      setError("An error occurred during registration. Please try again.");
+      setError(err.message || "An error occurred during registration. Please try again.");
     }
   };
 

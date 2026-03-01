@@ -13,6 +13,7 @@ import {
   Mail,
   Loader2
 } from 'lucide-react';
+import { apiRequest } from '../services/apiService';
 
 interface AdminLoginProps {
   onLogin: (identifier: string) => void;
@@ -52,21 +53,10 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onForgot, onSignUp, on
     // Login with server
     const performLogin = async () => {
       try {
-        const res = await fetch('/api/auth/login', {
+        const data = await apiRequest<any>('/api/auth/login', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ identifier: adminId, password, isAdmin: true })
         });
-        
-        const data = await res.json();
-        
-        if (!res.ok) {
-          setError(data.error || `Authentication failed (${res.status})`);
-          setIsLoggingIn(false);
-          setIsShaking(true);
-          setTimeout(() => setIsShaking(false), 500);
-          return;
-        }
         
         if (data.status === 'ok') {
           localStorage.setItem('kite_saved_adminid', adminId);
