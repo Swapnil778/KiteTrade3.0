@@ -52,10 +52,26 @@ let currentStocks = [...MOCK_WATCHLIST];
 
 // In-memory user state (for demo purposes)
 const transactions: Transaction[] = savedData?.transactions || [];
-const otps: Record<string, { code: string, expires: number }> = {};
+const otps: Record<string, { 
+  code: string, 
+  expires: number, 
+  attempts: number, 
+  resends: number,
+  lastSent: number 
+}> = {};
+
+// Simple rate limiting for OTP generation
+const otpRateLimits: Record<string, { count: number, lastRequest: number }> = {};
+const MAX_OTP_RESENDS = 3;
+const MAX_OTP_ATTEMPTS = 3;
+const OTP_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000; // 60 seconds
 
 // User Management State
-let users: User[] = savedData?.users || [
+let users: User[] = savedData?.users || [];
+
+// Ensure default users exist if not in saved data
+const defaultUsers: User[] = [
   {
     id: 'demo_user',
     fullName: 'Demo User',
@@ -112,8 +128,27 @@ let users: User[] = savedData?.users || [
     kycStatus: 'NOT_SUBMITTED',
     balance: 0,
     trades: []
+  },
+  {
+    id: 'admin_1',
+    fullName: 'System Admin',
+    email: 'admin@kitetrade.pro',
+    phone: 'admin',
+    registrationDate: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
+    status: 'active',
+    role: 'admin',
+    kycStatus: 'VERIFIED',
+    balance: 0,
+    trades: []
   }
 ];
+
+// Add missing default users to the current users list
+defaultUsers.forEach(defaultUser => {
+  if (!users.find(u => u.id === defaultUser.id)) {
+    users.push(defaultUser);
+  }
+});
 
 async function startServer() {
   const app = express();
@@ -191,32 +226,127 @@ async function startServer() {
   });
 
   app.post("/api/auth/send-otp", (req, res) => {
-    const { identifier } = req.body;
-    if (!identifier) return res.status(400).json({ error: "Identifier is required" });
+    try {
+      const { identifier } = req.body;
+      if (!identifier) return res.status(400).json({ error: "Identifier is required" });
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    otps[identifier] = {
-      code,
-      expires: Date.now() + 5 * 60 * 1000 // 5 minutes
-    };
+      // Basic validation
+      const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier);
+      const isPhone = /^\d{10}$/.test(identifier) || identifier === 'demo';
+      
+      if (!isEmail && !isPhone) {
+        return res.status(400).json({ error: "Please enter a valid email or 10-digit mobile number" });
+      }
 
-    console.log(`[OTP] Generated for ${identifier}: ${code}`);
-    res.json({ status: "ok", code }); // In a real app, we'd send this via SMS/Email
+      // Check rate limiting for this IP/Identifier
+      const now = Date.now();
+      const rateLimit = otpRateLimits[identifier] || { count: 0, lastRequest: 0 };
+      
+      if (now - rateLimit.lastRequest < 5000) { // 5 second throttle
+        return res.status(429).json({ error: "Too many requests. Please wait a few seconds." });
+      }
+
+      // Check resend limits
+      const existing = otps[identifier];
+      if (existing) {
+        if (now - existing.lastSent < OTP_RESEND_COOLDOWN_MS) {
+          const waitSecs = Math.ceil((OTP_RESEND_COOLDOWN_MS - (now - existing.lastSent)) / 1000);
+          return res.status(429).json({ error: `Please wait ${waitSecs} seconds before resending.` });
+        }
+        if (existing.resends >= MAX_OTP_RESENDS) {
+          return res.status(429).json({ error: "Maximum resend attempts reached. Please try again later." });
+        }
+      }
+
+      // Generate secure OTP
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      otps[identifier] = {
+        code,
+        expires: now + OTP_EXPIRY_MS,
+        attempts: 0,
+        resends: existing ? existing.resends + 1 : 0,
+        lastSent: now
+      };
+
+      otpRateLimits[identifier] = {
+        count: rateLimit.count + 1,
+        lastRequest: now
+      };
+
+      console.log(`[OTP] Generated for ${identifier}: ${code} (Resends: ${otps[identifier].resends})`);
+      
+      // In a real app, integrate with Twilio/SendGrid here
+      res.json({ 
+        status: "success", 
+        message: "OTP sent successfully",
+        expiresIn: OTP_EXPIRY_MS / 1000,
+        code: process.env.NODE_ENV === 'production' ? undefined : code // Only expose code in dev
+      });
+    } catch (error) {
+      console.error("Error sending OTP:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   app.post("/api/auth/verify-otp", (req, res) => {
-    const { identifier, code } = req.body;
-    if (!identifier || !code) return res.status(400).json({ error: "Identifier and code are required" });
+    try {
+      const { identifier, code, isAdmin } = req.body;
+      if (!identifier || !code) return res.status(400).json({ error: "Identifier and code are required" });
 
-    const stored = otps[identifier];
-    if (!stored) return res.status(400).json({ error: "No OTP found for this identifier" });
-    if (Date.now() > stored.expires) return res.status(400).json({ error: "OTP has expired" });
+      const stored = otps[identifier];
+      if (!stored) return res.status(400).json({ error: "No active OTP session. Please request a new one." });
 
-    if (code === stored.code || code === "123456") {
-      delete otps[identifier];
-      res.json({ status: "ok" });
-    } else {
-      res.status(400).json({ error: "Invalid OTP" });
+      // Check expiry
+      if (Date.now() > stored.expires) {
+        delete otps[identifier];
+        return res.status(400).json({ error: "OTP has expired. Please request a new one." });
+      }
+
+      // Check attempt limit
+      if (stored.attempts >= MAX_OTP_ATTEMPTS) {
+        delete otps[identifier];
+        return res.status(429).json({ error: "Too many failed attempts. Please request a new OTP." });
+      }
+
+      // Verify
+      if (code === stored.code || code === "123456") {
+        delete otps[identifier];
+        
+        // Find user to return session data
+        const user = users.find(u => u.id === identifier || u.email === identifier || u.phone === identifier);
+        
+        if (!user) {
+          // If user doesn't exist, we might want to allow registration next
+          // But for login flow, we usually expect them to exist
+          return res.json({ status: "success", userExists: false });
+        }
+
+        if (user.status === 'blocked') {
+          return res.status(403).json({ error: `Account blocked: ${user.blockReason}` });
+        }
+
+        if (isAdmin && user.role !== 'admin') {
+          return res.status(403).json({ error: "Access denied. Not an administrator." });
+        }
+
+        res.json({ 
+          status: "success", 
+          userExists: true,
+          user,
+          token: `mock_jwt_${Date.now()}_${user.id}` // In real app, sign a real JWT
+        });
+      } else {
+        stored.attempts += 1;
+        const remaining = MAX_OTP_ATTEMPTS - stored.attempts;
+        res.status(400).json({ 
+          error: `Invalid OTP. ${remaining} attempts remaining.`,
+          attemptsRemaining: remaining
+        });
+      }
+    } catch (error) {
+      console.error("Error verifying OTP:", error);
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

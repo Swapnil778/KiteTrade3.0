@@ -83,8 +83,9 @@ const Funds: React.FC<FundsProps> = ({ onBack }) => {
         if (data.balance !== undefined) {
           setBalance(data.balance);
         }
-      } catch (err) {
-        console.error("Failed to fetch balance:", err);
+      } catch (err: any) {
+        console.error("Failed to fetch balance:", err.message || err);
+        // Silent fail, index.tsx will handle logout if 404
       }
     };
 

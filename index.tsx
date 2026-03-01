@@ -93,8 +93,14 @@ const AppContent: React.FC = () => {
           handleLogout();
         }
       } catch (err: any) {
-        // Silent fail for profile fetch to avoid annoying popups on every 30s check
-        console.error("Profile fetch error:", err);
+        // If user is not found, they might have been deleted or server reset
+        if (err.status === 404) {
+          console.warn("User session invalid, logging out...");
+          handleLogout();
+        } else {
+          // Silent fail for other errors to avoid annoying popups
+          console.error("Profile fetch error:", err.message || err);
+        }
       }
     };
 

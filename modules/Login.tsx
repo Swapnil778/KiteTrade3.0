@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { ChevronLeft, AlertCircle, Check, ArrowRight, User, X, ShieldCheck, Lock } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ChevronLeft, AlertCircle, Check, ArrowRight, User, X, ShieldCheck, Lock, Loader2, MessageSquare, Clock, RefreshCcw } from 'lucide-react';
 import { apiRequest } from '../services/apiService';
 
 interface LoginProps {
@@ -13,11 +13,20 @@ interface LoginProps {
 
 const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onToggleAdmin }) => {
   const [userId, setUserId] = useState('');
+  const [step, setStep] = useState<'identifier' | 'otp'>('identifier');
+  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [timer, setTimer] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isShaking, setIsShaking] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [recentAccounts, setRecentAccounts] = useState<string[]>([]);
   const [hasOnboarded, setHasOnboarded] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+  const [generatedOtp, setGeneratedOtp] = useState<string | null>(null);
+
+  const otpInputs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     const storageKey = isAdmin ? 'kite_registered_admins' : 'kite_registered_users';
@@ -43,7 +52,17 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
     }
   }, [isAdmin]);
 
-  const handleLoginAttempt = (e?: React.FormEvent, directId?: string) => {
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  const handleSendOtp = async (e?: React.FormEvent, directId?: string) => {
     if (e) e.preventDefault();
     setError(null);
     setIsShaking(false);
@@ -55,53 +74,128 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
       return;
     }
 
-    // Login with server
-    const performLogin = async () => {
-      try {
-        const data = await apiRequest<any>('/api/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ identifier: inputId, isAdmin: false })
-        });
-        
-        if (data.status === 'ok') {
-          localStorage.setItem('kite_has_onboarded', 'true');
-          
-          // Update local storage to remember this user
-          const storageKey = isAdmin ? 'kite_registered_admins' : 'kite_registered_users';
-          let registeredUsers = [];
-          try {
-            const saved = localStorage.getItem(storageKey);
-            if (saved) {
-              registeredUsers = JSON.parse(saved);
-              if (!Array.isArray(registeredUsers)) registeredUsers = [];
-            }
-          } catch (e) {
-            registeredUsers = [];
-          }
+    // Basic format validation
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inputId);
+    const isPhone = /^\d{10}$/.test(inputId) || inputId === 'demo';
+    
+    if (!isEmail && !isPhone) {
+      setError("Please enter a valid email or 10-digit mobile number");
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 400);
+      return;
+    }
 
-          if (!registeredUsers.includes(inputId)) {
-            registeredUsers.push(inputId);
-            localStorage.setItem(storageKey, JSON.stringify(registeredUsers));
-          }
-
-          if (rememberMe) {
-            localStorage.setItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid', inputId);
-            localStorage.setItem('kite_is_logged_in', 'true');
-          } else {
-            localStorage.removeItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid');
-            localStorage.setItem('kite_is_logged_in', 'true');
-          }
-          onLogin(isAdmin, inputId);
-        }
-      } catch (err: any) {
-        console.error("Login error:", err);
-        setError(err.message || "Network connection failed. Please check your internet.");
-        setIsShaking(true);
-        setTimeout(() => setIsShaking(false), 400);
+    setIsSubmitting(true);
+    try {
+      const data = await apiRequest<any>('/api/auth/send-otp', {
+        method: 'POST',
+        body: JSON.stringify({ identifier: inputId })
+      });
+      
+      setGeneratedOtp(data.code || null);
+      setStep('otp');
+      setTimer(60);
+      if (data.code) {
+        setShowNotification(true);
+        setTimeout(() => setShowNotification(false), 8000);
       }
-    };
+    } catch (err: any) {
+      console.error("OTP send error:", err);
+      setError(err.message || "Failed to send OTP. Please try again.");
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 400);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-    performLogin();
+  const handleVerifyOtp = async () => {
+    const otpString = otp.join('');
+    if (otpString.length < 6) return;
+
+    setError(null);
+    setIsVerifying(true);
+    try {
+      const data = await apiRequest<any>('/api/auth/verify-otp', {
+        method: 'POST',
+        body: JSON.stringify({ identifier: userId, code: otpString, isAdmin })
+      });
+      
+      if (data.status === 'success') {
+        if (!data.userExists) {
+          setError("Account not found. Please sign up first.");
+          setStep('identifier');
+          return;
+        }
+
+        localStorage.setItem('kite_has_onboarded', 'true');
+        
+        // Update local storage to remember this user
+        const storageKey = isAdmin ? 'kite_registered_admins' : 'kite_registered_users';
+        let registeredUsers = [];
+        try {
+          const saved = localStorage.getItem(storageKey);
+          if (saved) {
+            registeredUsers = JSON.parse(saved);
+            if (!Array.isArray(registeredUsers)) registeredUsers = [];
+          }
+        } catch (e) {
+          registeredUsers = [];
+        }
+
+        if (!registeredUsers.includes(userId)) {
+          registeredUsers.push(userId);
+          localStorage.setItem(storageKey, JSON.stringify(registeredUsers));
+        }
+
+        if (rememberMe) {
+          localStorage.setItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid', userId);
+        } else {
+          localStorage.removeItem(isAdmin ? 'kite_saved_adminid' : 'kite_saved_userid');
+        }
+        
+        localStorage.setItem('kite_is_logged_in', 'true');
+        onLogin(isAdmin, userId);
+      }
+    } catch (err: any) {
+      console.error("OTP verify error:", err);
+      setError(err.message || "Invalid OTP. Please try again.");
+      setIsShaking(true);
+      setTimeout(() => setIsShaking(false), 400);
+      setOtp(['', '', '', '', '', '']);
+      otpInputs.current[0]?.focus();
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleOtpChange = (index: number, value: string) => {
+    if (value.length > 1) value = value[value.length - 1];
+    if (value && !/^\d$/.test(value)) return;
+
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+
+    if (value && index < 5) {
+      otpInputs.current[index + 1]?.focus();
+    }
+
+    if (newOtp.every(digit => digit !== '') && newOtp.join('').length === 6) {
+      // Auto submit if needed or wait for button
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      otpInputs.current[index - 1]?.focus();
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const removeRecent = (acc: string, e: React.MouseEvent) => {
@@ -116,9 +210,28 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
 
   return (
     <div className={`p-8 pt-16 flex flex-col h-full transition-colors relative screen-fade-in overflow-y-auto hide-scrollbar ${isAdmin ? 'bg-[#0b0e14] text-gray-100' : 'bg-white text-gray-800 dark:bg-black dark:text-gray-100'}`}>
+      
+      {/* Dev Notification for OTP */}
+      {showNotification && generatedOtp && (
+        <div className="fixed top-6 left-6 right-6 z-[100] animate-in slide-in-from-top-4 duration-500">
+          <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20">
+            <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+              <MessageSquare size={20} />
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Security Alert (Dev Mode)</p>
+              <p className="text-sm font-bold">Your login OTP is: <span className="text-lg font-black tracking-[0.2em] ml-1">{generatedOtp}</span></p>
+            </div>
+            <button onClick={() => setShowNotification(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex justify-between items-center mb-16">
         <button 
-          onClick={isAdmin ? onToggleAdmin : onForgot}
+          onClick={step === 'otp' ? () => setStep('identifier') : (isAdmin ? onToggleAdmin : onForgot)}
           className="w-11 h-11 flex items-center justify-center rounded-2xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 active:scale-90 transition-all"
         >
           <ChevronLeft size={22} className="text-gray-600 dark:text-gray-400" />
@@ -139,78 +252,141 @@ const Login: React.FC<LoginProps> = ({ onLogin, onForgot, onSignUp, isAdmin, onT
         <div className="flex items-center gap-2 mb-3">
           {isAdmin && <ShieldCheck className="text-blue-500" size={24} />}
           <h1 className={`text-4xl font-black tracking-tighter italic uppercase ${isAdmin ? 'text-white' : 'text-gray-900 dark:text-white'}`}>
-            {isAdmin ? 'Staff' : 'Kitetrade'} <span className={isAdmin ? 'text-blue-500' : 'text-brand-500'}>{isAdmin ? 'Terminal' : 'PRO'}</span>
+            {step === 'identifier' ? (isAdmin ? 'Staff' : 'Kitetrade') : 'Verify'} <span className={isAdmin ? 'text-blue-500' : 'text-brand-500'}>{step === 'identifier' ? (isAdmin ? 'Terminal' : 'PRO') : 'Identity'}</span>
           </h1>
         </div>
         <p className="text-base font-bold text-gray-400 dark:text-gray-500 tracking-tight">
-          {isAdmin ? 'Accessing Secure Administrative Layer' : 'Enter your Email or Mobile to continue'}
+          {step === 'identifier' 
+            ? (isAdmin ? 'Accessing Secure Administrative Layer' : 'Enter your Email or Mobile to continue')
+            : `We've sent a 6-digit code to ${userId.includes('@') ? userId : `+91 ${userId}`}`}
         </p>
       </div>
 
-      <form onSubmit={handleLoginAttempt} className={`space-y-8 ${isShaking ? 'animate-shake' : ''}`}>
-        <div className="relative group">
-          <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest block mb-2">
-            {isAdmin ? 'Administrator ID' : 'Email or Mobile Number'}
-          </label>
-          <input 
-            type="text" 
-            autoComplete="username"
-            autoFocus
-            className={`w-full border-b-2 py-4 bg-transparent outline-none transition-all text-2xl font-bold placeholder:text-gray-200 dark:placeholder:text-gray-800 ${
-              error ? 'border-kiteRed focus:border-kiteRed' : `border-gray-100 dark:border-gray-900 focus:border-${isAdmin ? 'blue-500' : 'brand-500'}`
-            }`}
-            placeholder={isAdmin ? "Staff ID" : "Email or Mobile Number"}
-            value={userId}
-            onChange={(e) => { setUserId(e.target.value); setError(null); }}
-          />
-        </div>
+      {step === 'identifier' ? (
+        <form onSubmit={handleSendOtp} className={`space-y-8 ${isShaking ? 'animate-shake' : ''}`}>
+          <div className="relative group">
+            <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest block mb-2">
+              {isAdmin ? 'Administrator ID' : 'Email or Mobile Number'}
+            </label>
+            <input 
+              type="text" 
+              autoComplete="username"
+              autoFocus
+              className={`w-full border-b-2 py-4 bg-transparent outline-none transition-all text-2xl font-bold placeholder:text-gray-200 dark:placeholder:text-gray-800 ${
+                error ? 'border-kiteRed focus:border-kiteRed' : `border-gray-100 dark:border-gray-900 focus:border-${isAdmin ? 'blue-500' : 'brand-500'}`
+              }`}
+              placeholder={isAdmin ? "Staff ID" : "Email or Mobile Number"}
+              value={userId}
+              onChange={(e) => { setUserId(e.target.value); setError(null); }}
+            />
+          </div>
 
-        <div className="flex justify-between items-center py-2">
-          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setRememberMe(!rememberMe)}>
-            <div className={`w-5 h-5 rounded-lg border-2 transition-all flex items-center justify-center ${
-              rememberMe ? (isAdmin ? 'bg-blue-600 border-blue-600' : 'bg-brand-500 border-brand-500') : 'border-gray-200 dark:border-gray-800 group-hover:border-brand-500'
-            }`}>
-              {rememberMe && <Check size={14} className="text-white" strokeWidth={3} />}
+          <div className="flex justify-between items-center py-2">
+            <div className="flex items-center gap-3 cursor-pointer group" onClick={() => setRememberMe(!rememberMe)}>
+              <div className={`w-5 h-5 rounded-lg border-2 transition-all flex items-center justify-center ${
+                rememberMe ? (isAdmin ? 'bg-blue-600 border-blue-600' : 'bg-brand-500 border-brand-500') : 'border-gray-200 dark:border-gray-800 group-hover:border-brand-500'
+              }`}>
+                {rememberMe && <Check size={14} className="text-white" strokeWidth={3} />}
+              </div>
+              <span className="text-xs text-gray-500 font-black uppercase tracking-widest">Remember Me</span>
             </div>
-            <span className="text-xs text-gray-500 font-black uppercase tracking-widest">Remember Me</span>
+            <button type="button" onClick={onForgot} className={`${isAdmin ? 'text-blue-500' : 'text-brand-500'} text-xs font-black uppercase tracking-widest hover:underline`}>
+              Forgot Details?
+            </button>
           </div>
-          <button type="button" onClick={onForgot} className={`${isAdmin ? 'text-blue-500' : 'text-brand-500'} text-xs font-black uppercase tracking-widest hover:underline`}>
-            Forgot Details?
+
+          {error && (
+            <div className="flex items-center gap-2 text-kiteRed text-sm font-black uppercase tracking-tight animate-in fade-in slide-in-from-top-1 duration-200 bg-kiteRed/5 p-4 rounded-2xl border border-kiteRed/10">
+              <AlertCircle size={18} />
+              {error}
+            </div>
+          )}
+
+          <button 
+            type="submit"
+            disabled={!userId || isSubmitting}
+            className={`w-full py-5 rounded-2xl font-black text-lg mt-4 transition-all shadow-xl flex items-center justify-center gap-3 active:scale-95 ${
+              (!userId || isSubmitting) 
+                ? (isAdmin ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed') 
+                : (isAdmin ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/25' : 'bg-brand-500 text-white hover:bg-brand-600 shadow-brand-500/25')
+            }`}
+          >
+            {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : (isAdmin ? 'ACCESS TERMINAL' : 'CONTINUE')} <ArrowRight size={20} strokeWidth={3} />
           </button>
-        </div>
-
-        {error && (
-          <div className="flex items-center gap-2 text-kiteRed text-sm font-black uppercase tracking-tight animate-in fade-in slide-in-from-top-1 duration-200 bg-kiteRed/5 p-4 rounded-2xl border border-kiteRed/10">
-            <AlertCircle size={18} />
-            {error}
+        </form>
+      ) : (
+        <div className={`space-y-10 ${isShaking ? 'animate-shake' : ''}`}>
+          <div className="flex justify-between gap-2">
+            {otp.map((digit, idx) => (
+              <input
+                key={idx}
+                ref={el => { otpInputs.current[idx] = el; }}
+                type="text"
+                inputMode="numeric"
+                pattern="\d*"
+                maxLength={1}
+                value={digit}
+                onChange={e => handleOtpChange(idx, e.target.value)}
+                onKeyDown={e => handleKeyDown(idx, e)}
+                className={`w-12 h-16 text-center text-3xl font-black rounded-2xl border-2 bg-transparent outline-none transition-all ${
+                  error ? 'border-kiteRed text-kiteRed' : `border-gray-100 dark:border-gray-900 focus:border-${isAdmin ? 'blue-500' : 'brand-500'} text-${isAdmin ? 'white' : 'gray-900 dark:text-white'}`
+                }`}
+                autoFocus={idx === 0}
+              />
+            ))}
           </div>
-        )}
 
-        <button 
-          type="submit"
-          disabled={!userId}
-          className={`w-full py-5 rounded-2xl font-black text-lg mt-4 transition-all shadow-xl flex items-center justify-center gap-3 active:scale-95 ${
-            (!userId) 
-              ? (isAdmin ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed') 
-              : (isAdmin ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/25' : 'bg-brand-500 text-white hover:bg-brand-600 shadow-brand-500/25')
-          }`}
-        >
-          {isAdmin ? 'ACCESS TERMINAL' : 'CONTINUE'} <ArrowRight size={20} strokeWidth={3} />
-        </button>
-      </form>
+          <div className="flex flex-col items-center gap-6">
+            {timer > 0 ? (
+              <div className="flex items-center gap-2 text-gray-400 font-bold uppercase tracking-widest text-[10px]">
+                <Clock size={14} />
+                Resend available in {formatTime(timer)}
+              </div>
+            ) : (
+              <button 
+                onClick={handleSendOtp}
+                disabled={isSubmitting}
+                className={`text-xs font-black uppercase tracking-widest ${isAdmin ? 'text-blue-500' : 'text-brand-500'} hover:underline flex items-center gap-2`}
+              >
+                {isSubmitting ? <Loader2 className="animate-spin" size={14} /> : <RefreshCcw size={14} />}
+                Resend OTP
+              </button>
+            )}
+
+            {error && (
+              <div className="w-full flex items-center gap-2 text-kiteRed text-sm font-black uppercase tracking-tight animate-in fade-in slide-in-from-top-1 duration-200 bg-kiteRed/5 p-4 rounded-2xl border border-kiteRed/10">
+                <AlertCircle size={18} />
+                {error}
+              </div>
+            )}
+
+            <button 
+              onClick={handleVerifyOtp}
+              disabled={otp.some(d => !d) || isVerifying}
+              className={`w-full py-5 rounded-2xl font-black text-lg transition-all shadow-xl flex items-center justify-center gap-3 active:scale-95 ${
+                (otp.some(d => !d) || isVerifying) 
+                  ? (isAdmin ? 'bg-gray-800 text-gray-600 cursor-not-allowed' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 dark:text-gray-600 cursor-not-allowed') 
+                  : (isAdmin ? 'bg-blue-600 text-white hover:bg-blue-500 shadow-blue-500/25' : 'bg-brand-500 text-white hover:bg-brand-600 shadow-brand-500/25')
+              }`}
+            >
+              {isVerifying ? <Loader2 className="animate-spin" size={20} /> : 'VERIFY & LOGIN'} <ArrowRight size={20} strokeWidth={3} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Quick Access Section */}
       {recentAccounts.length > 0 && (
         <div className="mt-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="flex justify-between items-center mb-5">
              <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Recent {isAdmin ? 'Staff' : 'Accounts'}</h3>
-             <button onClick={() => { setUserId(''); }} className={`text-[11px] ${isAdmin ? 'text-blue-500' : 'text-brand-500'} font-black uppercase tracking-widest`}>Switch Account</button>
+             <button onClick={() => { setUserId(''); setStep('identifier'); }} className={`text-[11px] ${isAdmin ? 'text-blue-500' : 'text-brand-500'} font-black uppercase tracking-widest`}>Switch Account</button>
           </div>
           <div className="space-y-4">
              {recentAccounts.map((acc, idx) => (
                <div 
                  key={acc + idx}
-                 onClick={() => { setUserId(acc); handleLoginAttempt(undefined, acc); }}
+                 onClick={() => { setUserId(acc); handleSendOtp(undefined, acc); }}
                  className={`flex items-center justify-between p-5 rounded-2xl border transition-all cursor-pointer group shadow-soft ${isAdmin ? 'hover:border-blue-500 bg-white/5 border-gray-800 hover:bg-white/10' : 'hover:border-brand-500 bg-white dark:bg-gray-900 border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50'}`}
                >
                  <div className="flex items-center gap-4">

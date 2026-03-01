@@ -45,8 +45,9 @@ const Profile: React.FC<ProfileProps> = ({ onBack, user: initialUser }) => {
           body: JSON.stringify({ identifier })
         });
         setUser(data);
-      } catch (err) {
-        console.error("Failed to fetch profile:", err);
+      } catch (err: any) {
+        console.error("Failed to fetch profile:", err.message || err);
+        // If 404, the user will be logged out by index.tsx periodic check
       } finally {
         setLoading(false);
       }
